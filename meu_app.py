@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 
 # --- CONFIGURAÇÕES DA PÁGINA ---
-st.set_page_config(page_title="RRB-SOLUÇÕES | Auditoria Pro", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="RRB-SOLUÇÕES | Admin", layout="wide", page_icon="🛡️")
 
 # --- DESIGN PERSONALIZADO (CSS) ---
 st.markdown("""
@@ -12,54 +12,24 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
     * { font-family: 'Inter', sans-serif; }
     .main { background-color: #f0f2f6; }
-    
     .header-container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-        background: white;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        margin-bottom: 25px;
+        display: flex; align-items: center; justify-content: center;
+        padding: 20px; background: white; border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 25px;
     }
-    
     .shield-icon {
         background: linear-gradient(135deg, #002D62 0%, #d90429 100%);
-        color: white;
-        padding: 15px;
-        border-radius: 12px;
-        margin-right: 15px;
-        font-size: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        color: white; padding: 15px; border-radius: 12px; margin-right: 15px; font-size: 30px;
     }
-
     .logo-text { font-weight: 800; font-size: 32px; color: #002D62; margin: 0; }
     .logo-sub { color: #d90429; }
-
     div.stButton > button:first-child {
-        background: #002D62;
-        color: white;
-        border-radius: 10px;
-        border: none;
-        height: 3.2em;
-        font-weight: 700;
-        width: 100%;
+        background: #002D62; color: white; border-radius: 10px; width: 100%; font-weight: 700;
     }
-    div.stButton > button:first-child:hover {
-        background: #d90429;
-    }
-
-    .stTextInput > div > div > input { border-radius: 10px !important; }
-    
+    div.stButton > button:first-child:hover { background: #d90429; }
     .audit-card {
-        background: white;
-        padding: 20px;
-        border-radius: 15px;
-        border-left: 5px solid #002D62;
-        margin-bottom: 20px;
+        background: white; padding: 20px; border-radius: 15px;
+        border-left: 5px solid #002D62; margin-bottom: 20px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -73,7 +43,6 @@ except Exception as e:
     st.error(f"Erro de conexão: {e}")
     st.stop()
 
-# --- FUNÇÕES DE SEGURANÇA ---
 def make_hashes(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
@@ -86,35 +55,61 @@ st.markdown("""
         <div class="shield-icon">🛡️</div>
         <div>
             <p class="logo-text">RRB-<span class="logo-sub">SOLUÇÕES</span></p>
-            <p style="margin:0; font-size:12px; color:gray; font-weight:bold; letter-spacing:1px;">AUDITORIA INTELIGENTE</p>
+            <p style="margin:0; font-size:12px; color:gray; font-weight:bold; letter-spacing:1px;">GESTÃO DE CONTRATOS</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-# --- ESTADO DA SESSÃO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
-# --- NAVEGAÇÃO ---
 opcao = st.sidebar.selectbox("Escolha o Portal", ["Login Cliente", "Portal Administrador"])
 
-# --- PORTAL ADMINISTRADOR ---
+# --- PORTAL ADMINISTRADOR (COM NOVOS CAMPOS) ---
 if opcao == "Portal Administrador":
-    st.markdown('<div class="audit-card"><h4>🛠️ Cadastro de Empresas</h4></div>', unsafe_allow_html=True)
+    st.markdown('<div class="audit-card"><h4>🛠️ Cadastro Detalhado de Empresa</h4></div>', unsafe_allow_html=True)
     senha_master = st.text_input("Senha Master", type='password')
     
     if senha_master == st.secrets["SENHA_MASTER"]:
         with st.form("admin_form"):
-            n_emp = st.text_input("Nome da Empresa")
-            l_emp = st.text_input("Login")
-            s_emp = st.text_input("Senha", type='password')
-            if st.form_submit_button("CADASTRAR"):
+            st.write("##### 📋 Dados Cadastrais")
+            col1, col2 = st.columns(2)
+            n_emp = col1.text_input("Nome da Empresa / Razão Social")
+            cnpj_emp = col2.text_input("CNPJ")
+            
+            rep_emp = col1.text_input("Representante Legal")
+            tel_emp = col2.text_input("Telefone de Contato")
+            
+            end_emp = st.text_input("Endereço Completo")
+            
+            st.write("##### 💰 Configurações de Acesso e Plano")
+            col3, col4 = st.columns(2)
+            l_emp = col3.text_input("Login de Usuário")
+            s_emp = col3.text_input("Senha Inicial", type='password')
+            
+            plano_emp = col4.selectbox("Plano Mensal", ["Bronze - R$ 299", "Prata - R$ 599", "Ouro - R$ 999", "Personalizado"])
+            
+            if st.form_submit_button("CADASTRAR E ATIVAR CONTRATO"):
                 if n_emp and l_emp and s_emp:
-                    dados = {"nome_empresa": n_emp, "login": l_emp, "senha": make_hashes(s_emp)}
-                    supabase.table("empresas").insert(dados).execute()
-                    st.success("✅ Empresa registrada!")
+                    dados = {
+                        "nome_empresa": n_emp, 
+                        "cnpj": cnpj_emp,
+                        "representante": rep_emp,
+                        "telefone": tel_emp,
+                        "endereco": end_emp,
+                        "plano_mensal": plano_emp,
+                        "login": l_emp, 
+                        "senha": make_hashes(s_emp)
+                    }
+                    try:
+                        supabase.table("empresas").insert(dados).execute()
+                        st.success(f"✅ Empresa {n_emp} cadastrada com sucesso!")
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
+                else:
+                    st.warning("Nome, Login e Senha são obrigatórios.")
 
-# --- PORTAL CLIENTE ---
+# --- PORTAL CLIENTE (LOGIN E AUDITORIA) ---
 elif opcao == "Login Cliente":
     if not st.session_state['autenticado']:
         st.markdown('<div class="audit-card"><h4>🔐 Acesso do Cliente</h4></div>', unsafe_allow_html=True)
@@ -130,8 +125,8 @@ elif opcao == "Login Cliente":
                 st.error("Login inválido.")
 
     if st.session_state['autenticado']:
-        st.sidebar.button("Encerrar Sessão", on_click=lambda: st.session_state.update({"autenticado": False}))
-        st.markdown(f"### 📊 Painel: {st.session_state['empresa_nome']}")
+        st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"autenticado": False}))
+        st.markdown(f"### 📊 Painel de Auditoria: {st.session_state['empresa_nome']}")
         
         st.markdown('<div class="audit-card">', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
@@ -144,9 +139,9 @@ elif opcao == "Login Cliente":
                 df1 = pd.read_csv(f1)
                 df2 = pd.read_csv(f2)
                 df_res = pd.merge(df1, df2, on='cpf', suffixes=('_RH', '_BANCO'))
-                st.write("#### ✅ Resultado")
+                st.write("#### ✅ Divergências Encontradas")
                 st.dataframe(df_res, use_container_width=True)
                 csv = df_res.to_csv(index=False).encode('utf-8')
-                st.download_button("💾 BAIXAR RELATÓRIO", csv, "auditoria.csv", "text/csv")
+                st.download_button("💾 BAIXAR RELATÓRIO", csv, "auditoria_rrb.csv", "text/csv")
             except Exception as e:
-                st.error(f"Erro: Verifique a coluna 'cpf'. {e}")
+                st.error("Erro no processamento. Verifique a coluna 'cpf'.")

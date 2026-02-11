@@ -7,39 +7,36 @@ from datetime import datetime, timedelta
 # --- 1. CONFIGURAÇÃO E ESTILO ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
-# CSS Ajustado para compatibilidade com Modo Escuro
+# O segredo está nos seletores específicos [data-testid] que forçam a cor do texto
 st.markdown("""<style>
-    /* Fundo suave para a página */
-    .stApp { background-color: #f4f7f9; }
-
-    /* Estilização das Métricas (Cards) */
+    /* Fundo da página */
+    .stApp { background-color: #f9f9f9; }
+    
+    /* Card das métricas: Forçamos fundo branco e texto preto */
     [data-testid="stMetric"] {
         background-color: white !important;
         padding: 20px !important;
         border-radius: 12px !important;
         border-top: 4px solid #002D62 !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-    }
-
-    /* FORÇAR COR PRETA NAS LETRAS DAS MÉTRICAS (Labels e Valores) */
-    [data-testid="stMetricLabel"] p {
-        color: #1f1f1f !important;
-        font-weight: 600 !important;
-    }
-    [data-testid="stMetricValue"] div {
-        color: #002D62 !important;
-        font-weight: 800 !important;
-    }
-
-    /* Ajuste para o Expander e textos internos no portal do funcionário */
-    .stExpander {
-        background-color: white !important;
-        border-radius: 10px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important;
     }
     
+    /* Força a cor do Rótulo (Label) para preto */
+    [data-testid="stMetricLabel"] p {
+        color: #1f1f1f !important;
+    }
+    
+    /* Força a cor do Valor (Value) para o azul da RRB */
+    [data-testid="stMetricValue"] div {
+        color: #002D62 !important;
+    }
+
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
     .admin-card { background: white; padding: 25px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 20px; }
+    
+    /* Garante que o texto dentro do expander também seja legível */
+    .stExpander { background-color: white !important; color: #1f1f1f !important; }
 </style>""", unsafe_allow_html=True)
 
 def render_header(titulo):
@@ -71,38 +68,23 @@ if menu == "👤 Funcionário":
         c_clean = "".join(filter(str.isdigit, cpf_in))
     
     if st.button("🔓 ACESSAR AUDITORIA") and c_clean:
-        try:
-            r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
-            if r.data:
-                d = r.data[-1]
-                val_data = str(dt_nasc_in) == str(d.get("data_nascimento", ""))
-                val_fone = str(d.get("telefone", "")).endswith(tel_fim_in)
-                
-                if val_data and val_fone:
-                    st.success(f"Bem-vindo, {d['nome_funcionario']}")
-                    m1, m2, m3 = st.columns(3)
-                    
-                    # As métricas agora usarão o CSS forçado acima
-                    m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
-                    m2.metric("Banco", d.get('banco_nome', 'N/A'))
-                    stt = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
-                    m3.metric("Status", stt)
-                    
-                    with st.expander("📊 Detalhes do Contrato"):
-                        # Forçando cor preta nos textos do expander para garantir leitura
-                        st.markdown(f"""<div style='color: black;'>
-                            <b>Empréstimo:</b> R$ {d.get('valor_emprestimo', 0):,.2f} | <b>ID:</b> {d.get('contrato_id', 'N/A')}<br>
-                            <b>Parcelas:</b> {int(d.get('parcelas_pagas', 0))} de {int(d.get('parcelas_total', 0))}
-                        </div>""", unsafe_allow_html=True)
-                        
-                        pp, pt = int(d.get('parcelas_pagas', 0)), int(d.get('parcelas_total', 0))
-                        if pt > 0: st.progress(min(pp/pt, 1.0))
-                else: 
-                    st.error("Dados de validação incorretos.")
-            else: 
-                st.warning("CPF não localizado.")
-        except Exception as e:
-            st.error(f"Erro na consulta: {e}")
+        r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
+        if r.data:
+            d = r.data[-1]
+            if str(dt_nasc_in) == str(d.get("data_nascimento", "")) and str(d.get("telefone", "")).endswith(tel_fim_in):
+                st.success(f"Bem-vindo, {d['nome_funcionario']}")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
+                m2.metric("Banco", d.get('banco_nome', 'N/A'))
+                stt = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
+                m3.metric("Status", stt)
+                with st.expander("📊 Detalhes do Contrato"):
+                    st.write(f"**Empréstimo:** R$ {d.get('valor_emprestimo', 0):,.2f} | **ID:** {d.get('contrato_id', 'N/A')}")
+                    pp, pt = int(d.get('parcelas_pagas', 0)), int(d.get('parcelas_total', 0))
+                    st.write(f"**Parcelas:** {pp} de {pt}")
+                    if pt > 0: st.progress(min(pp/pt, 1.0))
+            else: st.error("Dados de validação incorretos.")
+        else: st.warning("CPF não localizado.")
 
 # --- MÓDULO EMPRESA ---
 elif menu == "🏢 Empresa":

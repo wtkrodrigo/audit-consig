@@ -4,80 +4,63 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="RRB Auditoria", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="RRB Auditoria - Master", layout="wide")
 
+# Estilos CSS Avançados para Visual Sofisticado
 st.markdown("""<style>
-    .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; }
-    .logo-container { display: flex; align-items: center; gap: 15px; }
-    .logo-text { font-size: 26px; font-weight: bold; color: #002D62; }
-    .admin-card { background: white; padding: 20px; border-radius: 15px; border: 1px solid #ddd; }
+    .main { background-color: #f8f9fa; }
+    .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .logo-text { font-size: 32px; font-weight: bold; color: #002D62; letter-spacing: -1px; }
+    .admin-card { background-color: #ffffff; padding: 25px; border-radius: 15px; border: 1px solid #e0e0e0; }
+    .section-header { color: #002D62; font-size: 20px; font-weight: 600; margin-top: 10px; }
 </style>""", unsafe_allow_html=True)
 
-def render_header(t):
-    st.markdown(f"<div class='logo-container'><h2>🛡️ RRB | {t}</h2></div>", unsafe_allow_html=True)
+def logo():
+    st.markdown("<div class='logo-text'>🛡️ RRB SOLUÇÕES <span style='color:#666; font-weight:normal; font-size:18px;'>| Master Admin</span></div>", unsafe_allow_html=True)
     st.write("---")
 
-# --- CONEXÃO ---
+# --- CONEXÃO SUPABASE ---
 try:
-    su, sk = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+    su = st.secrets["SUPABASE_URL"]
+    sk = st.secrets["SUPABASE_KEY"]
     sb = create_client(su, sk)
-except:
-    st.error("Erro nos Secrets."); st.stop()
+except Exception as e:
+    st.error("Erro crítico de conexão. Verifique os Secrets.")
+    st.stop()
 
-def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
+def h(p): 
+    return hashlib.sha256(str.encode(p)).hexdigest()
 
 # --- NAVEGAÇÃO ---
-menu = st.sidebar.radio("Menu", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+st.sidebar.markdown("### 🏢 SISTEMA RRB")
+menu = st.sidebar.radio("Navegação Principal", ["👤 Portal do Funcionário", "🏢 Painel da Empresa", "⚙️ Configurações Master"])
 
-# --- 1. FUNCIONÁRIO ---
-if menu == "👤 Funcionário":
-    render_header("Funcionário")
-    cpf_in = st.text_input("CPF (números)")
-    c_cl = "".join(filter(str.isdigit, cpf_in))
+# --- MÓDULO 1: FUNCIONÁRIO ---
+if menu == "👤 Portal do Funcionário":
+    logo()
+    st.subheader("Consulta de Auditoria")
+    cpf_raw = st.text_input("Digite seu CPF para consultar")
+    cpf_clean = "".join(filter(str.isdigit, cpf_raw))
     
-    if st.button("BUSCAR") and c_cl:
-        r = sb.table("resultados_auditoria").select("*").eq("cpf", c_cl).execute()
-        if r.data:
-            d = r.data[-1]
-            st.success(f"Olá, {d.get('nome_funcionario')}")
+    if st.button("CONSULTAR AGORA") and cpf_clean:
+        res = sb.table("resultados_auditoria").select("*").eq("cpf", cpf_clean).execute()
+        if res.data:
+            dados = res.data[-1]
+            st.success(f"Registro localizado: {dados['nome_funcionario']}")
             c1, c2, c3 = st.columns(3)
-            c1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
-            c2.metric("Banco", d.get('banco_nome', 'N/A'))
-            st_at = "✅ OK" if d.get('diferenca', 0) == 0 else "⚠️ Erro"
-            c3.metric("Status", st_at)
-            
-            t, p = int(d.get('parcelas_total', 0)), int(d.get('parcelas_pagas', 0))
-            with st.expander("Detalhes do Empréstimo", expanded=True):
-                st.write(f"**Contrato:** {d.get('contrato_id')}")
-                st.write(f"**Pagas:** {p} | **Faltam:** {max(0, t-p)} | **Total:** {t}")
-                if t > 0: st.progress(min(1.0, p/t))
-        else: st.warning("Não encontrado.")
+            c1.metric("Mensalidade RH", f"R$ {dados.get('valor_rh', 0):,.2f}")
+            c2.metric("Banco de Origem", dados.get('banco_nome', 'N/A'))
+            c3.metric("Status", "✅ CONFORMIDADE" if dados.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA")
+        else:
+            st.warning("Dados não encontrados para este CPF.")
 
-# --- 2. EMPRESA ---
-elif menu == "🏢 Empresa":
-    render_header("Empresa")
-    if 'at' not in st.session_state: st.session_state.at = False
+# --- MÓDULO 2: EMPRESA ---
+elif menu == "🏢 Painel da Empresa":
+    logo()
+    if 'autenticado' not in st.session_state: st.session_state.autenticado = False
     
-    if not st.session_state.at:
-        u_in = st.text_input("Usuário")
-        p_in = st.text_input("Senha", type='password')
-        if st.button("ENTRAR"):
-            q = sb.table("empresas").select("*").eq("login", u_in).execute()
-            # LINHA PROTEGIDA CONTRA CORTE:
-            if q.data:
-                valid_pass = q.data[0]['senha']
-                if h(p_in) == valid_pass:
-                    st.session_state.at = True
-                    st.session_state.n = q.data[0]['nome_empresa']
-                    st.session_state.lk = q.data[0]['link_planilha']
-                    st.rerun()
-                else: st.error("Senha incorreta.")
-            else: st.error("Usuário não existe.")
-    else:
-        st.subheader(f"Empresa: {st.session_state.n}")
-        if st.sidebar.button("SAIR"): st.session_state.at = False; st.rerun()
-        if st.button("🔄 SINCRONIZAR"):
-            try:
-                df = pd.read_csv(st.session_state.lk)
-                df.columns = df.columns.str.strip().str.lower()
+    if not st.session_state.autenticado:
+        with st.container():
+            st.info("Acesse com suas credenciais de parceiro RRB.")
+            u_in = st.text_

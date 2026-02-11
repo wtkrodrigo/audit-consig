@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="RRB Auditoria", layout="wide")
 
-# Estilos CSS
 st.markdown("""<style>
     .stMetric { background: white; padding: 15px; border-radius: 10px; border-left: 5px solid #002D62; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     .logo-text { font-size: 26px; font-weight: bold; color: #002D62; margin-bottom: 20px; }
@@ -23,7 +22,7 @@ try:
     sk = st.secrets["SUPABASE_KEY"]
     sb = create_client(su, sk)
 except Exception as e:
-    st.error("Erro nas credenciais do Supabase nos Secrets.")
+    st.error("Erro nas credenciais do Supabase.")
     st.stop()
 
 def h(p): 
@@ -74,7 +73,6 @@ elif menu == "🏢 Empresa":
             st.session_state.autenticado = False
             st.rerun()
         
-        # Sincronização com UPSERT (Evita duplicados)
         if st.button("🔄 SINCRONIZAR PLANILHA"):
             try:
                 df = pd.read_csv(st.session_state.url_planilha)
@@ -90,4 +88,52 @@ elif menu == "🏢 Empresa":
                         "nome_funcionario": str(row['nome']),
                         "valor_rh": v_rh,
                         "valor_banco": v_bc,
-                        "valor_emprest
+                        "valor_emprestimo": float(pd.to_numeric(row.get('valor_emprestimo', 0), 'coerce') or 0),
+                        "diferenca": round(v_rh - v_bc, 2),
+                        "banco_nome": str(row.get('banco', 'N/A')),
+                        "contrato_id": str(row.get('contrato', 'N/A')),
+                        "parcelas_total": int(pd.to_numeric(row.get('total_parcelas', 0), 'coerce') or 0),
+                        "data_processamento": datetime.now().isoformat()
+                    }
+                    # O comando upsert abaixo evita duplicatas usando o CPF e o Contrato como chave
+                    sb.table("resultados_auditoria").upsert(payload, on_conflict="cpf,contrato_id").execute()
+                st.success("Dados sincronizados com sucesso!")
+            except Exception as e: 
+                st.error(f"Erro na sincronização: {e}")
+
+        # Visualização básica dos dados processados
+        res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.nome_emp).execute()
+        if res_db.data:
+            st.dataframe(pd.DataFrame(res_db.data), use_container_width=True)
+
+# --- MÓDULO 3: ADMIN ---
+elif menu == "⚙️ Admin":
+    logo()
+    senha_mestre = st.secrets.get("SENHA_MASTER", "RRB123")
+    check_pass = st.text_input("Chave Mestra", type='password')
+    
+    if check_pass == senha_mestre:
+        st.success("Acesso Liberado")
+        with st.form("cadastro_empresa_form"):
+            c1, c2 = st.columns(2)
+            razao = c1.text_input("Razão Social")
+            cnpj = c2.text_input("CNPJ")
+            login_emp = c1.text_input("Login de Acesso")
+            senha_emp = c2.text_input("Senha de Acesso", type='password')
+            link = st.text_input("Link CSV da Planilha")
+            
+            if st.form_submit_button("SALVAR EMPRESA"):
+                if razao and login_emp and senha_emp:
+                    dados_emp = {
+                        "nome_empresa": razao,
+                        "cnpj": cnpj,
+                        "login": login_emp,
+                        "senha": h(senha_emp),
+                        "link_planilha": link,
+                        "data_expiracao": (datetime.now() + timedelta(days=365)).isoformat()
+                    }
+                    try:
+                        sb.table("empresas").insert(dados_emp).execute()
+                        st.success(f"Empresa {razao} cadastrada!")
+                    except Exception as e: 
+                        st.error(f"Erro ao salvar: {e}")

@@ -10,14 +10,13 @@ st.set_page_config(page_title="RRB", layout="wide", page_icon="🛡️")
 st.markdown("""<style>
     .main { background: #f8f9fa; }
     .stMetric { background: white; padding: 15px; border-radius: 12px; border-left: 5px solid #002D62; box-shadow: 0 2px 5px #0001; }
-    .header { display: flex; align-items: center; gap: 10px; background: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; }
-    .shield { font-size: 35px; color: #002D62; border-right: 2px solid #eee; padding-right: 15px; }
-    .brand { font-weight: 900; font-size: 24px; color: #002D62; }
+    .header { display: flex; align-items: center; gap: 12px; background: white; padding: 18px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px #0000000d; }
+    .shield { font-size: 38px; color: #002D62; border-right: 2px solid #eee; padding-right: 15px; line-height: 1; }
+    .brand { font-weight: 900; font-size: 26px; color: #002D62; line-height: 1; }
     .dot { color: #d90429; }
 </style>""", unsafe_allow_html=True)
 
-# Logotipo Moderno: Escudo + Texto
-st.markdown(f'<div class="header"><div class="shield">🛡️</div><div class="brand">RRB<span class="dot">.</span>SOLUÇÕES</div></div>', unsafe_allow_html=True)
+st.markdown('<div class="header"><div class="shield">🛡️</div><div class="brand">RRB<span class="dot">.</span>SOLUÇÕES</div></div>', unsafe_allow_html=True)
 
 # --- CONEXÃO ---
 try:
@@ -51,19 +50,4 @@ if m == "👤 Funcionário":
 elif m == "🏢 Empresa":
     if 'at' not in st.session_state: st.session_state.at = False
     if not st.session_state.at:
-        u, p = st.text_input("Login"), st.text_input("Senha", type='password')
-        if st.button("Entrar"):
-            q = sb.table("empresas").select("*").eq("login", u).execute()
-            if q.data and ch(p, q.data[0]['senha']):
-                exp = datetime.strptime(q.data[0]['data_expiracao'], "%Y-%m-%d")
-                if datetime.now() > exp: st.error("Expirado")
-                else: st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']; st.rerun()
-    else:
-        st.subheader(f"Auditoria: {st.session_state.n}")
-        f1, f2 = st.file_uploader("RH"), st.file_uploader("Banco")
-        if f1 and f2:
-            df1, df2 = pd.read_csv(f1), pd.read_csv(f2)
-            res = pd.merge(df1, df2, on='cpf')
-            res['dif'] = res['valor_descontado_rh'] - res['valor_devido_banco']
-            k1, k2 = st.columns(2)
-            k1.metric("Total", len(res)); k2
+        u, p = st.text_input("Login

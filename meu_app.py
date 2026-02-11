@@ -5,18 +5,9 @@ import hashlib
 from datetime import datetime, timedelta
 
 # --- CONFIG ---
-st.set_page_config(page_title="RRB", layout="wide", page_icon="🛡️")
-st.markdown("""<style>
-    .main { background: #f8f9fa; }
-    .stMetric { background: white; padding: 15px; border-radius: 12px; border-left: 5px solid #002D62; box-shadow: 0 2px 5px #0001; }
-    .header { display: flex; align-items: center; gap: 12px; background: white; padding: 15px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px #0001; }
-    .shield { font-size: 30px; border-right: 2px solid #eee; padding-right: 15px; }
-    .brand { font-weight: 900; font-size: 22px; color: #002D62; }
-</style>""", unsafe_allow_html=True)
+st.set_page_config(page_title="RRB-SOLUÇÕES", layout="wide", page_icon="🛡️")
 
-st.markdown('<div class="header"><div class="shield">🛡️</div><div class="brand">RRB<span style="color:#d90429">.</span>SOLUÇÕES</div></div>', unsafe_allow_html=True)
-
-# --- DB ---
+# --- CONEXÃO ---
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except:
@@ -24,13 +15,13 @@ except:
 
 def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 
-# --- NAV ---
+# --- MENU ---
 m = st.sidebar.selectbox("Módulo", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin"])
 
-# 1. FUNCIONÁRIO
+# 1. FUNCIONÁRIO (Visual Mobile)
 if m == "👤 Funcionário":
-    st.subheader("Consulta de Transparência")
-    cpf_in = st.text_input("Digite o CPF")
+    st.subheader("🔎 Consulta de Transparência")
+    cpf_in = st.text_input("Seu CPF")
     cpf = "".join(filter(str.isdigit, cpf_in))
     if st.button("VERIFICAR") and cpf:
         r = sb.table("resultados_auditoria").select("*").eq("cpf", cpf).order("data_processamento", desc=True).limit(1).execute()
@@ -39,11 +30,11 @@ if m == "👤 Funcionário":
             c1, c2 = st.columns(2)
             c1.metric("Folha RH", f"R$ {d['valor_rh']}")
             c2.metric("Banco", f"R$ {d['valor_banco']}")
-            if d['diferenca'] == 0: st.info("✅ Tudo em dia")
-            else: st.error(f"❌ Diferença: R$ {abs(d['diferenca'])}")
-        else: st.warning("Não encontrado.")
+            if d['diferenca'] == 0: st.info("✅ Valores Corretos")
+            else: st.error(f"❌ Divergência: R$ {abs(d['diferenca'])}")
+        else: st.warning("Dados não encontrados para este CPF.")
 
-# 2. EMPRESA
+# 2. EMPRESA (Automação via Planilha)
 elif m == "🏢 Empresa":
     if 'at' not in st.session_state: st.session_state.at = False
     if not st.session_state.at:
@@ -51,45 +42,38 @@ elif m == "🏢 Empresa":
         if st.button("Entrar"):
             q = sb.table("empresas").select("*").eq("login", u).execute()
             if q.data and h(p) == q.data[0]['senha']:
-                exp = datetime.strptime(q.data[0]['data_expiracao'], "%Y-%m-%d")
-                if datetime.now() > exp: st.error("Acesso Expirado")
-                else: st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']; st.rerun()
-            else: st.error("Login Inválido")
+                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
+                st.session_state.link = q.data[0].get('link_planilha', "") # Puxa o link salvo
+                st.rerun()
     else:
-        st.subheader(f"Gestão: {st.session_state.n}")
-        f1, f2 = st.file_uploader("RH (CSV)"), st.file_uploader("Banco (CSV)")
-        if f1 and f2:
-            df1, df2 = pd.read_csv(f1), pd.read_csv(f2)
-            res = pd.merge(df1, df2, on='cpf')
-            res['dif'] = res['valor_descontado_rh'] - res['valor_devido_banco']
-            st.metric("Total de Funcionários", len(res))
-            st.dataframe(res, use_container_width=True)
-            if st.button("🚀 PUBLICAR"):
-                sb.table("resultados_auditoria").delete().eq("nome_empresa", st.session_state.n).execute()
-                for _, r in res.iterrows():
-                    pl = {"nome_empresa": st.session_state.n, "cpf": str(r['cpf']), "nome_funcionario": r['nome'], "valor_rh": float(r['valor_descontado_rh']), "valor_banco": float(r['valor_devido_banco']), "diferenca": float(r['dif']), "status": "OK" if r['dif']==0 else "ERRO"}
-                    sb.table("resultados_auditoria").insert(pl).execute()
-                st.success("Dados publicados!")
+        st.subheader(f"Gestão Automática: {st.session_state.n}")
+        if st.button("🔄 ATUALIZAR DADOS DA PLANILHA"):
+            if st.session_state.link:
+                try:
+                    df = pd.read_csv(st.session_state.link)
+                    df['dif'] = df['valor_rh'] - df['valor_banco']
+                    
+                    # Limpa e Publica no Supabase
+                    sb.table("resultados_auditoria").delete().eq("nome_empresa", st.session_state.n).execute()
+                    for _, r in df.iterrows():
+                        pl = {"nome_empresa": st.session_state.n, "cpf": str(r['cpf']), "nome_funcionario": r['nome'], 
+                              "valor_rh": float(r['valor_rh']), "valor_banco": float(r['valor_banco']), 
+                              "diferenca": float(r['dif']), "status": "OK" if r['dif']==0 else "ERRO"}
+                        sb.table("resultados_auditoria").insert(pl).execute()
+                    st.success("Auditoria atualizada e disponível para os funcionários!")
+                    st.dataframe(df)
+                except: st.error("Erro ao ler planilha. Verifique o link CSV.")
+            else: st.warning("Link da planilha não configurado pelo Admin.")
 
-# 3. ADMIN
+# 3. ADMIN (Cadastro com Link da Planilha)
 elif m == "⚙️ Admin":
     pw = st.text_input("Senha Master", type='password')
-    if pw and pw == st.secrets.get("SENHA_MASTER"):
-        st.markdown("### 📝 Cadastro de Empresa")
-        with st.form("cad_completo"):
-            c1, c2 = st.columns(2)
-            with c1:
-                nome_emp = st.text_input("Razão Social")
-                cnpj = st.text_input("CNPJ")
-                rep = st.text_input("Representante")
-            with c2:
-                tel = st.text_input("Telefone")
-                end = st.text_input("Endereço")
-                dias = st.number_input("Dias de Acesso", 1, 365, 30)
-            u_log, s_log = st.text_input("Usuário"), st.text_input("Senha", type='password')
-            if st.form_submit_button("FINALIZAR CADASTRO"):
-                if nome_emp and u_log and s_log:
-                    v = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
-                    dados = {"nome_empresa": nome_emp, "cnpj": cnpj, "representante": rep, "telefone": tel, "endereco": end, "login": u_log, "senha": h(s_log), "data_expiracao": v}
-                    sb.table("empresas").insert(dados).execute()
-                    st.success(f"Ativo até {v}")
+    if pw == st.secrets.get("SENHA_MASTER"):
+        with st.form("cad"):
+            st.write("Novo Cliente")
+            n, l, s = st.text_input("Empresa"), st.text_input("Login"), st.text_input("Senha", type='password')
+            link = st.text_input("Link da Planilha (Publicado como CSV)")
+            if st.form_submit_button("CADASTRAR"):
+                v = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+                sb.table("empresas").insert({"nome_empresa": n, "login": l, "senha": h(s), "data_expiracao": v, "link_planilha": link}).execute()
+                st.success("Empresa cadastrada e integrada!")

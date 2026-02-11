@@ -3,42 +3,66 @@ import pandas as pd
 from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
+from PIL import Image
 
 # --- 1. CONFIGURAÇÃO E ESTILO ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
-st.markdown("""<style>
+st.markdown("""
+<style>
     .main { background-color: #f9f9f9; }
-    .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .stMetric { 
+        background: white; 
+        padding: 20px; 
+        border-radius: 12px; 
+        border-top: 4px solid #002D62; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+    }
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
-</style>""", unsafe_allow_html=True)
+</style>
+""", unsafe_allow_html=True)
 
 def render_header(titulo):
-    st.markdown(f"""<div class='logo-container'><span style='font-size: 40px;'>🛡️</span>
-        <div class='logo-text'>RRB SOLUÇÕES <span style='font-weight:normal; color:#666; font-size:18px;'>| {titulo}</span></div>
-    </div>""", unsafe_allow_html=True)
+    col_logo, col_texto = st.columns([1, 5])
+    with col_logo:
+        try:
+            # Substitua pelo nome exato do arquivo no seu GitHub
+            logo = Image.open("1000060961.png")
+            st.image(logo, width=150)
+        except Exception:
+            st.markdown("<span style='font-size: 40px;'>🛡️</span>", unsafe_allow_html=True)
+    
+    with col_texto:
+        st.markdown(f"""
+            <div style='padding-top: 10px;'>
+                <div class='logo-text'>RRB SOLUÇÕES</div>
+                <div style='color:#666; font-size:18px;'>| {titulo}</div>
+            </div>
+        """, unsafe_allow_html=True)
     st.write("---")
 
 # --- 2. CONEXÃO ---
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-except:
-    st.error("Erro nos Secrets."); st.stop()
+except Exception as e:
+    st.error(f"Erro nos Secrets: {e}")
+    st.stop()
 
-def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
+def h(p): 
+    return hashlib.sha256(str.encode(p)).hexdigest()
 
 # --- 3. NAVEGAÇÃO ---
 menu = st.sidebar.radio("Selecione o Portal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
 
-# --- MÓDULO FUNCIONÁRIO (VALIDAÇÃO TRIPLA) ---
+# --- MÓDULO FUNCIONÁRIO ---
 if menu == "👤 Funcionário":
     render_header("Portal do Funcionário")
     with st.container():
         st.info("🔐 Informe seus dados para liberar a consulta.")
         c1, c2 = st.columns(2)
         cpf_in = c1.text_input("CPF (somente números)")
-        dt_nasc_in = c2.date_input("Data de Nascimento", min_value=datetime(1930,1,1), format="DD/MM/YYYY")
+        dt_nasc_in = c2.date_input("Data de Nascimento", min_value=datetime(1930, 1, 1), format="DD/MM/YYYY")
         tel_fim_in = st.text_input("Últimos 4 dígitos do seu telefone", max_chars=4)
         c_clean = "".join(filter(str.isdigit, cpf_in))
     
@@ -46,7 +70,6 @@ if menu == "👤 Funcionário":
         r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
         if r.data:
             d = r.data[-1]
-            # Lógica de Cruzamento: Data e Final do Telefone
             val_data = str(dt_nasc_in) == str(d.get("data_nascimento", ""))
             val_fone = str(d.get("telefone", "")).endswith(tel_fim_in)
             
@@ -57,35 +80,40 @@ if menu == "👤 Funcionário":
                 m2.metric("Banco", d.get('banco_nome', 'N/A'))
                 stt = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
                 m3.metric("Status", stt)
+                
                 with st.expander("📊 Detalhes do Contrato"):
                     st.write(f"**Empréstimo:** R$ {d.get('valor_emprestimo', 0):,.2f} | **ID:** {d.get('contrato_id', 'N/A')}")
                     pp, pt = int(d.get('parcelas_pagas', 0)), int(d.get('parcelas_total', 0))
                     st.write(f"**Parcelas:** {pp} de {pt}")
-                    if pt > 0: st.progress(min(pp/pt, 1.0))
+                    if pt > 0:
+                        st.progress(min(pp/pt, 1.0))
             else:
                 st.error("Dados de validação incorretos (Data ou Telefone).")
         else:
             st.warning("CPF não localizado.")
 
-# --- MÓDULO EMPRESA (COM BUSCA E EXPORTAÇÃO) ---
+# --- MÓDULO EMPRESA ---
 elif menu == "🏢 Empresa":
     render_header("Painel da Empresa")
-    if 'at' not in st.session_state: st.session_state.at = False
+    if 'at' not in st.session_state:
+        st.session_state.at = False
+        
     if not st.session_state.at:
-        u = st.text_input("Usuário"); p = st.text_input("Senha", type='password')
+        u = st.text_input("Usuário")
+        p = st.text_input("Senha", type='password')
         if st.button("ACESSAR"):
             q = sb.table("empresas").select("*").eq("login", u).execute()
             if q.data and h(p) == q.data[0]['senha']:
-                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
-                st.session_state.lk = q.data[0].get('link_planilha'); st.rerun()
-            else: st.error("Login inválido.")
+                st.session_state.at = True
+                st.session_state.n = q.data[0]['nome_empresa']
+                st.session_state.lk = q.data[0].get('link_planilha')
+                st.rerun()
+            else:
+                st.error("Login inválido.")
     else:
         st.subheader(f"Gestão: {st.session_state.n}")
-        
-        # Botões de Ação
         c_act1, c_act2, _ = st.columns([1, 1, 2])
         
-        # Carregar dados atuais para busca/exportação
         res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
         df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
 
@@ -95,12 +123,17 @@ elif menu == "🏢 Empresa":
                     df = pd.read_csv(st.session_state.lk)
                     df.columns = df.columns.str.strip().str.lower()
                     for _, r in df.iterrows():
-                        vr, vb = float(pd.to_numeric(r.get('valor_rh', 0), 'coerce') or 0), float(pd.to_numeric(r.get('valor_banco', 0), 'coerce') or 0)
+                        vr = float(pd.to_numeric(r.get('valor_rh', 0), 'coerce') or 0)
+                        vb = float(pd.to_numeric(r.get('valor_banco', 0), 'coerce') or 0)
                         payload = {
-                            "nome_empresa": st.session_state.n, "cpf": "".join(filter(str.isdigit, str(r['cpf']))),
-                            "nome_funcionario": str(r['nome']), "valor_rh": vr, "valor_banco": vb,
+                            "nome_empresa": st.session_state.n,
+                            "cpf": "".join(filter(str.isdigit, str(r['cpf']))),
+                            "nome_funcionario": str(r['nome']),
+                            "valor_rh": vr,
+                            "valor_banco": vb,
                             "valor_emprestimo": float(pd.to_numeric(r.get('valor_emprestimo', 0), 'coerce') or 0),
-                            "diferenca": round(vr - vb, 2), "banco_nome": str(r.get('banco', 'N/A')),
+                            "diferenca": round(vr - vb, 2),
+                            "banco_nome": str(r.get('banco', 'N/A')),
                             "contrato_id": str(r.get('contrato', 'N/A')),
                             "parcelas_total": int(pd.to_numeric(r.get('total_parcelas', 0), 'coerce') or 0),
                             "parcelas_pagas": int(pd.to_numeric(r.get('parcelas_pagas', 0), 'coerce') or 0),
@@ -109,8 +142,10 @@ elif menu == "🏢 Empresa":
                             "data_processamento": datetime.now().isoformat()
                         }
                         sb.table("resultados_auditoria").upsert(payload).execute()
-                    st.success("Sincronizado!"); st.rerun()
-                except Exception as e: st.error(f"Erro: {e}")
+                    st.success("Sincronizado!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro: {e}")
 
         with c_act2:
             if not df_empresa.empty:
@@ -130,12 +165,21 @@ elif menu == "⚙️ Admin Master":
         with st.form("f_adm_master"):
             st.subheader("📝 Cadastrar Nova Empresa")
             c1, c2, c3 = st.columns([2, 1, 1])
-            razao, cnpj, plano = c1.text_input("Razão Social"), c2.text_input("CNPJ"), c3.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
+            razao = c1.text_input("Razão Social")
+            cnpj = c2.text_input("CNPJ")
+            plano = c3.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
+            
             c4, c5, c6 = st.columns([1, 1, 2])
-            rep, tel, end = c4.text_input("Representante"), c5.text_input("Telefone"), c6.text_input("Endereço")
+            rep = c4.text_input("Representante")
+            tel = c5.text_input("Telefone")
+            end = c6.text_input("Endereço")
             st.divider()
+            
             c7, c8, c9 = st.columns(3)
-            lo, se, lk = c7.text_input("Login Admin"), c8.text_input("Senha", type='password'), c9.text_input("URL Planilha (CSV)")
+            lo = c7.text_input("Login Admin")
+            se = c8.text_input("Senha", type='password')
+            lk = c9.text_input("URL Planilha (CSV)")
+            
             if st.form_submit_button("✅ SALVAR EMPRESA"):
                 if razao and lo and se:
                     dt = {
@@ -145,11 +189,15 @@ elif menu == "⚙️ Admin Master":
                     }
                     try:
                         sb.table("empresas").insert(dt).execute()
-                        st.success("Empresa cadastrada!"); st.rerun()
-                    except Exception as e: st.error(f"Erro: {e}")
+                        st.success("Empresa cadastrada!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro: {e}")
         
         st.write("---")
         try:
             em = sb.table("empresas").select("nome_empresa, cnpj, plano").execute()
-            if em.data: st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
-        except: pass
+            if em.data:
+                st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
+        except Exception:
+            pass

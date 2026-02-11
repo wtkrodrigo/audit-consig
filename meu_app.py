@@ -3,14 +3,13 @@ import pandas as pd
 from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
+import plotly.graph_objects as go
 
 # --- 1. CONFIGURAÇÃO E ESTILO ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
-# CSS Ajustado para Dark/Light Mode e Fix de cores
 st.markdown("""
 <style>
-    /* Estilo adaptativo para os cards de métricas */
     [data-testid="stMetric"] {
         background-color: var(--secondary-background-color);
         padding: 15px 20px;
@@ -18,31 +17,12 @@ st.markdown("""
         border-top: 4px solid #002D62;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    
-    /* Garante que o texto das métricas se adapte ao tema */
     [data-testid="stMetric"] label, [data-testid="stMetric"] div {
         color: var(--text-color) !important;
     }
-
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-    
-    .logo-text { 
-        font-size: 28px; 
-        font-weight: bold; 
-        color: #002D62; 
-    }
-    
-    @media (prefers-color-scheme: dark) {
-        .logo-text { color: #4A90E2; }
-    }
-
-    .admin-card { 
-        background-color: var(--secondary-background-color); 
-        padding: 25px; 
-        border-radius: 15px; 
-        border: 1px solid rgba(128, 128, 128, 0.2); 
-        margin-bottom: 20px; 
-    }
+    .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
+    @media (prefers-color-scheme: dark) { .logo-text { color: #4A90E2; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -113,12 +93,44 @@ elif menu == "🏢 Empresa":
             else: st.error("Login inválido.")
     else:
         st.subheader(f"Gestão: {st.session_state.n}")
-        c_act1, c_act2, _ = st.columns([1, 1, 2])
         
         # Carregar dados
         res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
         df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
 
+        if not df_empresa.empty:
+            # --- CÁLCULO E GRÁFICO DE CONFORMIDADE ---
+            conf = len(df_empresa[df_empresa['diferenca'] == 0])
+            div = len(df_empresa[df_empresa['diferenca'] != 0])
+            
+            col_chart, col_stats = st.columns([1, 2])
+            
+            with col_chart:
+                fig = go.Figure(data=[go.Pie(
+                    labels=['Conforme', 'Divergente'], 
+                    values=[conf, div], 
+                    hole=.6,
+                    marker_colors=['#28a745', '#dc3545'],
+                    textinfo='percent+label'
+                )])
+                fig.update_layout(
+                    showlegend=False, 
+                    margin=dict(t=0, b=0, l=0, r=0), 
+                    height=200,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color='gray')
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col_stats:
+                st.write("### Resumo de Auditoria")
+                c1, c2 = st.columns(2)
+                c1.metric("Total Analisado", len(df_empresa))
+                c2.metric("Divergências", div, delta=f"{div} casos", delta_color="inverse")
+        
+        st.divider()
+        c_act1, c_act2, _ = st.columns([1, 1, 2])
         with c_act1:
             if st.button("🔄 SINCRONIZAR AGORA"):
                 try:
@@ -147,7 +159,6 @@ elif menu == "🏢 Empresa":
             if not df_empresa.empty:
                 st.download_button("📥 EXPORTAR CSV", df_empresa.to_csv(index=False).encode('utf-8'), "auditoria.csv", "text/csv")
 
-        st.divider()
         busca = st.text_input("🔍 Pesquisar funcionário (Nome ou CPF)")
         if not df_empresa.empty:
             if busca:

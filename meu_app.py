@@ -69,29 +69,4 @@ elif m == "🏢 Empresa":
         if c_s.button("🔴 SAIR"):
             st.session_state.at = False; st.rerun()
             
-        if st.button("🔄 ATUALIZAR E MOSTRAR LISTA"):
-            try:
-                df_raw = pd.read_csv(st.session_state.lk)
-                df_raw.columns = df_raw.columns.str.strip().str.lower()
-                df_raw = df_raw.dropna(subset=['cpf', 'nome'])
-                for _, r in df_raw.iterrows():
-                    v_rh = pd.to_numeric(r['valor_rh'], errors='coerce')
-                    v_ba = pd.to_numeric(r['valor_banco'], errors='coerce')
-                    t_pa = pd.to_numeric(r['total_parcelas'], errors='coerce')
-                    v_rh = 0.0 if pd.isna(v_rh) else float(v_rh)
-                    v_ba = 0.0 if pd.isna(v_ba) else float(v_ba)
-                    t_pa = 0 if pd.isna(t_pa) else int(t_pa)
-                    pld = {
-                        "nome_empresa": st.session_state.n,
-                        "cpf": str(r['cpf']),
-                        "nome_funcionario": str(r['nome']),
-                        "valor_rh": v_rh, "valor_banco": v_ba,
-                        "diferenca": v_rh - v_ba,
-                        "banco_nome": str(r.get('banco', 'N/A')),
-                        "contrato_id": str(r.get('contrato', 'N/A')),
-                        "parcelas_total": t_pa,
-                        "data_processamento": datetime.now().isoformat()
-                    }
-                    sb.table("resultados_auditoria").insert(pld).execute()
-                st.success("✅ Sincronizado!")
-            except Exception as e:
+        if st.button("🔄 ATUALIZAR E MOSTRAR

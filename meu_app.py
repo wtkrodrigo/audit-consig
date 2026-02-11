@@ -12,7 +12,6 @@ st.markdown("""<style>
     .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
-    .admin-card { background: white; padding: 25px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 20px; }
 </style>""", unsafe_allow_html=True)
 
 def render_header(titulo):
@@ -32,7 +31,7 @@ def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 # --- 3. NAVEGAÇÃO ---
 menu = st.sidebar.radio("Selecione o Portal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
 
-# --- MÓDULO FUNCIONÁRIO ---
+# --- MÓDULO FUNCIONÁRIO (VALIDAÇÃO TRIPLA) ---
 if menu == "👤 Funcionário":
     render_header("Portal do Funcionário")
     with st.container():
@@ -47,7 +46,11 @@ if menu == "👤 Funcionário":
         r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
         if r.data:
             d = r.data[-1]
-            if str(dt_nasc_in) == str(d.get("data_nascimento", "")) and str(d.get("telefone", "")).endswith(tel_fim_in):
+            # Lógica de Cruzamento: Data e Final do Telefone
+            val_data = str(dt_nasc_in) == str(d.get("data_nascimento", ""))
+            val_fone = str(d.get("telefone", "")).endswith(tel_fim_in)
+            
+            if val_data and val_fone:
                 st.success(f"Bem-vindo, {d['nome_funcionario']}")
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
@@ -59,14 +62,15 @@ if menu == "👤 Funcionário":
                     pp, pt = int(d.get('parcelas_pagas', 0)), int(d.get('parcelas_total', 0))
                     st.write(f"**Parcelas:** {pp} de {pt}")
                     if pt > 0: st.progress(min(pp/pt, 1.0))
-            else: st.error("Dados de validação incorretos.")
-        else: st.warning("CPF não localizado.")
+            else:
+                st.error("Dados de validação incorretos (Data ou Telefone).")
+        else:
+            st.warning("CPF não localizado.")
 
-# --- MÓDULO EMPRESA ---
+# --- MÓDULO EMPRESA (COM BUSCA E EXPORTAÇÃO) ---
 elif menu == "🏢 Empresa":
     render_header("Painel da Empresa")
     if 'at' not in st.session_state: st.session_state.at = False
-    
     if not st.session_state.at:
         u = st.text_input("Usuário"); p = st.text_input("Senha", type='password')
         if st.button("ACESSAR"):
@@ -78,10 +82,10 @@ elif menu == "🏢 Empresa":
     else:
         st.subheader(f"Gestão: {st.session_state.n}")
         
-        # Botoes de Ação
+        # Botões de Ação
         c_act1, c_act2, _ = st.columns([1, 1, 2])
         
-        # Carregar dados atuais
+        # Carregar dados atuais para busca/exportação
         res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
         df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
 
@@ -91,8 +95,7 @@ elif menu == "🏢 Empresa":
                     df = pd.read_csv(st.session_state.lk)
                     df.columns = df.columns.str.strip().str.lower()
                     for _, r in df.iterrows():
-                        vr = float(pd.to_numeric(r.get('valor_rh', 0), 'coerce') or 0)
-                        vb = float(pd.to_numeric(r.get('valor_banco', 0), 'coerce') or 0)
+                        vr, vb = float(pd.to_numeric(r.get('valor_rh', 0), 'coerce') or 0), float(pd.to_numeric(r.get('valor_banco', 0), 'coerce') or 0)
                         payload = {
                             "nome_empresa": st.session_state.n, "cpf": "".join(filter(str.isdigit, str(r['cpf']))),
                             "nome_funcionario": str(r['nome']), "valor_rh": vr, "valor_banco": vb,
@@ -125,14 +128,14 @@ elif menu == "⚙️ Admin Master":
     render_header("Configurações Master")
     if st.sidebar.text_input("Chave Master", type='password') == st.secrets.get("SENHA_MASTER", "RRB123"):
         with st.form("f_adm_master"):
-            st.subheader("📝 Cadastrar Nova Empresa Parceira")
+            st.subheader("📝 Cadastrar Nova Empresa")
             c1, c2, c3 = st.columns([2, 1, 1])
             razao, cnpj, plano = c1.text_input("Razão Social"), c2.text_input("CNPJ"), c3.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
             c4, c5, c6 = st.columns([1, 1, 2])
-            rep, tel, end = c4.text_input("Representante"), c5.text_input("Telefone"), c6.text_input("Endereço Completo")
+            rep, tel, end = c4.text_input("Representante"), c5.text_input("Telefone"), c6.text_input("Endereço")
             st.divider()
             c7, c8, c9 = st.columns(3)
-            lo, se, lk = c7.text_input("Login Administrativo"), c8.text_input("Senha", type='password'), c9.text_input("URL Planilha (CSV)")
+            lo, se, lk = c7.text_input("Login Admin"), c8.text_input("Senha", type='password'), c9.text_input("URL Planilha (CSV)")
             if st.form_submit_button("✅ SALVAR EMPRESA"):
                 if razao and lo and se:
                     dt = {
@@ -142,11 +145,11 @@ elif menu == "⚙️ Admin Master":
                     }
                     try:
                         sb.table("empresas").insert(dt).execute()
-                        st.success("Cadastrada!"); st.rerun()
+                        st.success("Empresa cadastrada!"); st.rerun()
                     except Exception as e: st.error(f"Erro: {e}")
         
         st.write("---")
         try:
-            em = sb.table("empresas").select("nome_empresa, cnpj, representante, plano").execute()
+            em = sb.table("empresas").select("nome_empresa, cnpj, plano").execute()
             if em.data: st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
         except: pass

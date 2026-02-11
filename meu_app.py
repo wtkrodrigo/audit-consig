@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- CONFIG ---
+# --- CONFIG E ESTILO ---
 st.set_page_config(page_title="RRB", layout="wide", page_icon="🛡️")
 
 st.markdown("""<style>
@@ -40,7 +40,7 @@ if m == "👤 Funcionário":
             c1, c2 = st.columns(2)
             c1.metric("Folha RH", f"R$ {d['valor_rh']:.2f}")
             c2.metric("Banco", f"R$ {d['valor_banco']:.2f}")
-            if d['diferenca'] == 0: st.info("✅ Correto")
+            if d['diferenca'] == 0: st.info("✅ Tudo em dia")
             else: st.error(f"❌ Erro: R$ {abs(d['diferenca']):.2f}")
         else: st.warning("Não encontrado.")
 
@@ -52,7 +52,8 @@ elif m == "🏢 Empresa":
         if st.button("Entrar"):
             q = sb.table("empresas").select("*").eq("login", u).execute()
             if q.data and h(p) == q.data[0]['senha']:
-                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
+                st.session_state.at = True
+                st.session_state.n = q.data[0]['nome_empresa']
                 st.session_state.lk = q.data[0].get('link_planilha', "")
                 st.rerun()
     else:
@@ -74,30 +75,39 @@ elif m == "🏢 Empresa":
                     }
                     sb.table("resultados_auditoria").insert(row).execute()
                 st.success("Sucesso!"); st.dataframe(df)
-            except Exception as e:
-                st.error("Erro no link ou dados da planilha.")
+            except: st.error("Erro na leitura dos dados.")
 
 # 3. ADMIN
 elif m == "⚙️ Admin":
     pw = st.text_input("Senha Master", type='password')
     if pw == st.secrets.get("SENHA_MASTER"):
-        with st.form("cad"):
+        with st.form("cad_rrb"):
             c1, c2 = st.columns(2)
             with c1:
-                n_emp = st.text_input("Empresa")
-                n_cnpj = st.text_input("CNPJ")
+                n_emp = st.text_input("Razão Social")
+                n_cnp = st.text_input("CNPJ")
                 n_rep = st.text_input("Representante")
             with c2:
-                n_tel = st.text_input("Tel")
+                n_tel = st.text_input("Telefone")
                 n_end = st.text_input("Endereço")
-                n_dias = st.number_input("Dias", 1, 365, 30)
+                n_dia = st.number_input("Dias", 1, 365, 30)
             st.markdown("---")
             n_lk = st.text_input("Link CSV Planilha")
-            n_u = st.text_input("User Cliente")
-            n_s = st.text_input("Pass Cliente", type='password')
+            n_u = st.text_input("User Login")
+            n_s = st.text_input("Pass Login", type='password')
             if st.form_submit_button("CADASTRAR"):
-                exp = (datetime.now() + timedelta(days=n_dias)).strftime("%Y-%m-%d")
+                exp = (datetime.now() + timedelta(days=n_dia)).strftime("%Y-%m-%d")
+                # Dicionário quebrado em linhas para evitar o SyntaxError de corte
                 d_ins = {
-                    "nome_empresa": n_emp, "cnpj": n_cnpj, "representante": n_rep,
-                    "telefone": n_tel, "endereco": n_end, "login": n_u,
-                    "senha": h(n_s), "data_expiracao": exp, "link_
+                    "nome_empresa": n_emp,
+                    "cnpj": n_cnp,
+                    "representante": n_rep,
+                    "telefone": n_tel,
+                    "endereco": n_end,
+                    "login": n_u,
+                    "senha": h(n_s),
+                    "data_expiracao": exp,
+                    "link_planilha": n_lk
+                }
+                sb.table("empresas").insert(d_ins).execute()
+                st.success(f"Ativo até: {exp}")

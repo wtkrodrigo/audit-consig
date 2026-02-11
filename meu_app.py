@@ -18,7 +18,6 @@ def r_h(t):
     st.markdown(f"### 🛡️ RRB SOLUÇÕES | {t}")
     st.write("---")
 
-# Tabelas
 TA, TE = "resultados_auditoria", "empresas"
 
 # --- 2. NAVEGAÇÃO ---
@@ -44,8 +43,8 @@ if m == "👤 Funcionário":
                 cl1, cl2, cl3 = st.columns(3)
                 cl1.metric("Mensalidade", f"R$ {d.get('valor_rh',0):,.2f}")
                 cl2.metric("Banco", d.get('banco_nome','N/A'))
-                status = "✅ CONFORME" if d.get('diferenca',0)==0 else "⚠️ DIVERGÊNCIA"
-                cl3.metric("Status", status)
+                stt = "✅ CONFORME" if d.get('diferenca',0)==0 else "⚠️ DIVERGÊNCIA"
+                cl3.metric("Status", stt)
                 with st.expander("Detalhes"):
                     pp, pt = int(d.get("parcelas_pagas",0)), int(d.get("parcelas_total",0))
                     st.write(f"Contrato: {d.get('contrato_id','N/A')}")
@@ -77,19 +76,36 @@ elif m == "🏢 Empresa":
                     for _, row in df.iterrows():
                         vr, vb = float(row.get("valor_rh",0)), float(row.get("valor_banco",0))
                         payload = {
-                            "nome_empresa": st.session_state.n,
-                            "cpf": "".join(filter(str.isdigit, str(row["cpf"]))),
-                            "nome_funcionario": str(row["nome"]),
-                            "valor_rh": vr, "valor_banco": vb,
-                            "diferenca": round(vr - vb, 2),
-                            "banco_nome": str(row.get("banco", "N/A")),
-                            "contrato_id": str(row.get("contrato", "N/A")),
-                            "parcelas_total": int(row.get("total_parcelas", 0)),
-                            "parcelas_pagas": int(row.get("parcelas_pagas", 0)),
-                            "data_nascimento": str(row.get("data_nascimento", "")),
+                            "nome_empresa": st.session_state.n, "cpf": "".join(filter(str.isdigit, str(row["cpf"]))),
+                            "nome_funcionario": str(row["nome"]), "valor_rh": vr, "valor_banco": vb,
+                            "diferenca": round(vr - vb, 2), "banco_nome": str(row.get("banco", "N/A")),
+                            "contrato_id": str(row.get("contrato", "N/A")), "parcelas_total": int(row.get("total_parcelas", 0)),
+                            "parcelas_pagas": int(row.get("parcelas_pagas", 0)), "data_nascimento": str(row.get("data_nascimento", "")),
                             "telefone": "".join(filter(str.isdigit, str(row.get("telefone", "")))),
                             "data_processamento": datetime.now().isoformat()
                         }
                         sb.table(TA).upsert(payload).execute()
                     st.success("OK!")
             except Exception as e:
+                st.error(f"Erro: {e}")
+        res = sb.table(TA).select("*").eq("nome_empresa", st.session_state.n).execute()
+        if res.data:
+            df_res = pd.DataFrame(res.data)
+            busca = st.text_input("🔍 Buscar")
+            if busca: df_res = df_res[df_res["nome_funcionario"].str.contains(busca, case=False)]
+            st.dataframe(df_res, use_container_width=True)
+
+# --- MÓDULO ADMIN ---
+elif m == "⚙️ Admin":
+    r_h("Master")
+    pw = st.sidebar.text_input("Chave Master", type="password")
+    if pw == st.secrets.get("SENHA_MASTER", "RRB123"):
+        with st.form("f_adm"):
+            st.write("Novo Cadastro")
+            c_a, c_b = st.columns(2)
+            rz = c_a.text_input("Razão")
+            cj = c_b.text_input("CNPJ")
+            lo = c_a.text_input("Login")
+            se = c_b.text_input("Senha", type="password")
+            lk = st.text_input("Link CSV")
+            if st.

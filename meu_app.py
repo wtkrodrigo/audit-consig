@@ -18,29 +18,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def render_header(titulo):
-    st.markdown(f"""
-    <div class='logo-container'>
-        <span style='font-size: 35px;'>🛡️</span>
-        <div class='logo-text'>RRB SOLUÇÕES <span style='font-weight:normal; color:#666; font-size:16px;'>| {titulo}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
+    h_html = f"<div class='logo-container'><span style='font-size: 35px;'>🛡️</span>"
+    h_html += f"<div class='logo-text'>RRB SOLUÇÕES <span style='font-weight:normal; color:#666; font-size:16px;'>| {titulo}</span></div></div>"
+    st.markdown(h_html, unsafe_allow_html=True)
     st.write("---")
 
 # --- 2. CONEXÃO ---
 try:
-    u = st.secrets["SUPABASE_URL"]
-    k = st.secrets["SUPABASE_KEY"]
-    sb = create_client(u, k)
-except Exception as e:
-    st.error("Erro nos Secrets. Verifique SUPABASE_URL e SUPABASE_KEY.")
+    s_u = st.secrets["SUPABASE_URL"]
+    s_k = st.secrets["SUPABASE_KEY"]
+    sb = create_client(s_u, s_k)
+except Exception:
+    st.error("Erro nos Secrets do Supabase.")
     st.stop()
 
 def h(p):
     return hashlib.sha256(str.encode(p)).hexdigest()
 
-# Nomes de tabelas em variáveis curtas para evitar quebra de linha (SyntaxError)
-TAB_AUDIT = "resultados_auditoria"
-TAB_EMPRE = "empresas"
+T_AUDIT = "resultados_auditoria"
+T_EMPRE = "empresas"
 
 # --- 3. NAVEGAÇÃO ---
 menu = st.sidebar.radio("Selecione o Portal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
@@ -57,24 +53,14 @@ if menu == "👤 Funcionário":
         c_clean = "".join(filter(str.isdigit, cpf_in))
         
     if st.button("CONSULTAR") and c_clean:
-        try:
-            r = sb.table(TAB_AUDIT).select("*").eq("cpf", c_clean).execute()
-            if r.data:
-                d = r.data[-1]
-                v_dt = str(dt_nasc) == str(d.get("data_nascimento", ""))
-                v_tl = str(d.get("telefone", "")).endswith(tel_fim)
-                
-                if v_dt and v_tl:
-                    st.success(f"Bem-vindo, {d['nome_funcionario']}")
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
-                    m2.metric("Banco", d.get('banco_nome', 'N/A'))
-                    status = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
-                    m3.metric("Status", status)
-                    
-                    with st.expander("Ver Detalhes do Contrato"):
-                        st.write(f"**Contrato:** {d.get('contrato_id', 'N/A')}")
-                        p_p = int(d.get("parcelas_pagas", 0))
-                        p_t = int(d.get("parcelas_total", 0))
-                        st.write(f"**Parcelas:** {p_p} de {p_t}")
-                        if p_t > 0:
+        r = sb.table(T_AUDIT).select("*").eq("cpf", c_clean).execute()
+        if r.data:
+            d = r.data[-1]
+            v_dt = str(dt_nasc) == str(d.get("data_nascimento", ""))
+            v_tl = str(d.get("telefone", "")).endswith(tel_fim)
+            if v_dt and v_tl:
+                st.success(f"Bem-vindo, {d['nome_funcionario']}")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
+                m2.metric("Banco", d.get('banco_nome', 'N/A'))
+                status = "✅ CONFORME" if d.get

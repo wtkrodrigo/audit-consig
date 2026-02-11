@@ -5,28 +5,14 @@ import hashlib
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURAÇÃO E ESTILO ---
-# Definindo o tema claro diretamente na configuração da página
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
 st.markdown("""<style>
-    /* Forçando o fundo da aplicação para cinza claro/branco */
-    .stApp { background-color: #f9f9f9; }
-    
-    /* Estilo original dos cards de métrica */
-    .stMetric { 
-        background: white; 
-        padding: 20px; 
-        border-radius: 12px; 
-        border-top: 4px solid #002D62; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-    }
-    
+    .main { background-color: #f9f9f9; }
+    .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
     .admin-card { background: white; padding: 25px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 20px; }
-    
-    /* Ajuste para garantir que textos fiquem escuros no padrão claro */
-    h1, h2, h3, p, span { color: #1f1f1f; }
 </style>""", unsafe_allow_html=True)
 
 def render_header(titulo):
@@ -91,7 +77,11 @@ elif menu == "🏢 Empresa":
             else: st.error("Login inválido.")
     else:
         st.subheader(f"Gestão: {st.session_state.n}")
+        
+        # Botoes de Ação
         c_act1, c_act2, _ = st.columns([1, 1, 2])
+        
+        # Carregar dados atuais
         res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
         df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
 

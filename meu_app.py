@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 # --- CONFIG E ESTILO ---
 st.set_page_config(page_title="RRB-SOLUÇÕES", layout="wide", page_icon="🛡️")
 
-# CSS Compacto para visual moderno e logotipo simulado
 st.markdown("""<style>
     .main { background: #f4f7f9; }
     .stMetric { background: white; padding: 15px; border-radius: 12px; border-left: 5px solid #002D62; }
@@ -16,10 +15,9 @@ st.markdown("""<style>
     .logo-dot { color: #d90429; }
 </style>""", unsafe_allow_html=True)
 
-# --- HEADER LOGOTIPO (Aparece em todas as abas) ---
 st.markdown('<div class="logo-container"><span class="logo-rrb">RRB<span class="logo-dot">.</span>SOLUÇÕES</span><span style="margin-left: 10px; color: gray; font-size: 10px;">🛡️ AUDITORIA DIGITAL</span></div>', unsafe_allow_html=True)
 
-# --- FUNÇÕES E CONEXÃO ---
+# --- CONEXÃO ---
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except:
@@ -46,8 +44,6 @@ if m == "👤 Funcionário":
                 c1.metric("Folha RH", f"R$ {d['valor_rh']}")
                 c2.metric("Base Banco", f"R$ {d['valor_banco']}")
                 c3.metric("Status", d['status'], delta=d['diferenca'] if d['diferenca']!=0 else None, delta_color="inverse")
-                if d['status'] == "✅ OK": st.info("Seu desconto está 100% correto.")
-                else: st.error(f"Divergência de R$ {abs(d['diferenca'])} identificada.")
             else: st.warning("Dados não localizados.")
 
 # 2. EMPRESA
@@ -69,10 +65,12 @@ elif m == "🏢 Empresa":
             res['Status'] = res['Diferença'].apply(lambda x: "✅ OK" if x == 0 else "❌ ERRO")
             st.dataframe(res)
             if st.button("🚀 PUBLICAR PARA COLABORADORES"):
-                for _, r in res.iterrows():
-                    pl = {"nome_empresa": st.session_state.n, "cpf": str(r['cpf']), "nome_funcionario": r['nome'], "valor_rh": float(r['valor_descontado_rh']), "valor_banco": float(r['valor_devido_banco']), "diferenca": float(r['Diferença']), "status": r['Status']}
-                    sb.table("resultados_auditoria").insert(pl).execute()
-                st.success("Publicado!")
+                with st.spinner("Atualizando dados..."):
+                    sb.table("resultados_auditoria").delete().eq("nome_empresa", st.session_state.n).execute()
+                    for _, r in res.iterrows():
+                        pl = {"nome_empresa": st.session_state.n, "cpf": str(r['cpf']), "nome_funcionario": r['nome'], "valor_rh": float(r['valor_descontado_rh']), "valor_banco": float(r['valor_devido_banco']), "diferenca": float(r['Diferença']), "status": r['Status']}
+                        sb.table("resultados_auditoria").insert(pl).execute()
+                st.success("Publicado com Sucesso!")
 
 # 3. ADMIN
 elif m == "⚙️ Admin":
@@ -82,3 +80,7 @@ elif m == "⚙️ Admin":
             n, l, s = st.text_input("Empresa"), st.text_input("Login"), st.text_input("Senha", type='password')
             pl = st.selectbox("Plano (Dias)", [30, 60, 90])
             if st.form_submit_button("Cadastrar"):
+                ex = (datetime.now() + timedelta(days=pl)).strftime("%Y-%m-%d")
+                d_e = {"nome_empresa": n, "login": l, "senha": h(s), "data_expiracao": ex, "plano_mensal": str(pl)}
+                sb.table("empresas").insert(d_e).execute()
+                st.success(f"Empresa {n} cadastrada com sucesso!")

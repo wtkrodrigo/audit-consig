@@ -13,7 +13,6 @@ st.markdown("""
     .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
-    .admin-card { background: white; padding: 30px; border-radius: 15px; border: 1px solid #ddd; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -26,7 +25,7 @@ try:
     if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
         sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     else:
-        st.error("Erro: Configurações de conexão não encontradas.")
+        st.error("Erro: Secrets não configurados.")
         st.stop()
 except Exception as e:
     st.error(f"Erro de conexão: {e}")
@@ -50,43 +49,11 @@ if menu == "👤 Funcionário":
         c_clean = "".join(filter(str.isdigit, cpf_in))
         
     if st.button("CONSULTAR") and c_clean:
-        try:
-            r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
-            if r.data:
-                d = r.data[-1]
-                if str(dt_nasc) == str(d.get("data_nascimento", "")) and str(d.get("telefone", "")).endswith(tel_fim):
-                    st.success(f"Bem-vindo, {d['nome_funcionario']}")
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
-                    m2.metric("Banco", d.get('banco_nome', 'N/A'))
-                    status = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
-                    m3.metric("Status", status)
-                    with st.expander("Ver parcelas"):
-                        p_p = int(d.get("parcelas_pagas", 0))
-                        p_t = int(d.get("parcelas_total", 0))
-                        st.write(f"Contrato: {d.get('contrato_id', 'N/A')}")
-                        st.write(f"Parcelas: {p_p} de {p_t}")
-                        if p_t > 0: st.progress(min(p_p/p_t, 1.0))
-                else:
-                    st.error("Dados de validação incorretos.")
-            else:
-                st.warning("CPF não localizado.")
-        except Exception as e:
-            st.error(f"Erro: {e}")
-
-# --- MÓDULO EMPRESA ---
-elif menu == "🏢 Empresa":
-    render_header("Painel da Empresa")
-    if "at" not in st.session_state: st.session_state.at = False
-    
-    if not st.session_state.at:
-        u = st.text_input("Usuário")
-        p = st.text_input("Senha", type="password")
-        if st.button("ACESSAR"):
-            q = sb.table("empresas").select("*").eq("login", u).execute()
-            if q.data and h(p) == q.data[0]["senha"]:
-                st.session_state.at, st.session_state.n, st.session_state.lk = True, q.data[0]["nome_empresa"], q.data[0].get("link_planilha")
-                st.rerun()
-            else: st.error("Login inválido.")
-    else:
-        st.subheader(f"Empresa
+        r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
+        if r.data:
+            d = r.data[-1]
+            if str(dt_nasc) == str(d.get("data_nascimento", "")) and str(d.get("telefone", "")).endswith(tel_fim):
+                st.success(f"Bem-vindo, {d['nome_funcionario']}")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
+                m2.metric("Banco", d.get('banco_nome', 'N/A'))

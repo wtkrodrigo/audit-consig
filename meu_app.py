@@ -18,26 +18,29 @@ st.markdown("""
         border-top: 4px solid #002D62; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
     }
-    .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-    .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
+    .logo-container { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; }
+    .logo-text { font-size: 28px; font-weight: bold; color: #002D62; line-height: 1.1; }
 </style>
 """, unsafe_allow_html=True)
 
 def render_header(titulo):
+    """Renderiza o topo da página com o logotipo e o título do portal"""
     col_logo, col_texto = st.columns([1, 5])
+    
     with col_logo:
         try:
-            # Substitua pelo nome exato do arquivo no seu GitHub
+            # Carrega o logotipo enviado (o arquivo deve estar na mesma pasta no GitHub)
             logo = Image.open("1000060961.png")
-            st.image(logo, width=150)
+            st.image(logo, width=140)
         except Exception:
-            st.markdown("<span style='font-size: 40px;'>🛡️</span>", unsafe_allow_html=True)
-    
+            # Fallback caso a imagem falhe (ex: erro de caminho no GitHub)
+            st.markdown("<span style='font-size: 50px;'>🛡️</span>", unsafe_allow_html=True)
+
     with col_texto:
         st.markdown(f"""
-            <div style='padding-top: 10px;'>
+            <div style='padding-top: 15px;'>
                 <div class='logo-text'>RRB SOLUÇÕES</div>
-                <div style='color:#666; font-size:18px;'>| {titulo}</div>
+                <div style='color:#666; font-size:18px;'>Auditoria e Gestão | {titulo}</div>
             </div>
         """, unsafe_allow_html=True)
     st.write("---")
@@ -46,7 +49,7 @@ def render_header(titulo):
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except Exception as e:
-    st.error(f"Erro nos Secrets: {e}")
+    st.error(f"Erro de conexão (Secrets): {e}")
     st.stop()
 
 def h(p): 
@@ -145,59 +148,8 @@ elif menu == "🏢 Empresa":
                     st.success("Sincronizado!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Erro: {e}")
+                    st.error(f"Erro na sincronização: {e}")
 
         with c_act2:
             if not df_empresa.empty:
-                st.download_button("📥 EXPORTAR CSV", df_empresa.to_csv(index=False).encode('utf-8'), "auditoria.csv", "text/csv")
-
-        st.divider()
-        busca = st.text_input("🔍 Pesquisar funcionário (Nome ou CPF)")
-        if not df_empresa.empty:
-            if busca:
-                df_empresa = df_empresa[df_empresa['nome_funcionario'].str.contains(busca, case=False, na=False) | df_empresa['cpf'].str.contains(busca, na=False)]
-            st.dataframe(df_empresa, use_container_width=True, hide_index=True)
-
-# --- MÓDULO ADMIN MASTER ---
-elif menu == "⚙️ Admin Master":
-    render_header("Configurações Master")
-    if st.sidebar.text_input("Chave Master", type='password') == st.secrets.get("SENHA_MASTER", "RRB123"):
-        with st.form("f_adm_master"):
-            st.subheader("📝 Cadastrar Nova Empresa")
-            c1, c2, c3 = st.columns([2, 1, 1])
-            razao = c1.text_input("Razão Social")
-            cnpj = c2.text_input("CNPJ")
-            plano = c3.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
-            
-            c4, c5, c6 = st.columns([1, 1, 2])
-            rep = c4.text_input("Representante")
-            tel = c5.text_input("Telefone")
-            end = c6.text_input("Endereço")
-            st.divider()
-            
-            c7, c8, c9 = st.columns(3)
-            lo = c7.text_input("Login Admin")
-            se = c8.text_input("Senha", type='password')
-            lk = c9.text_input("URL Planilha (CSV)")
-            
-            if st.form_submit_button("✅ SALVAR EMPRESA"):
-                if razao and lo and se:
-                    dt = {
-                        "nome_empresa": razao, "cnpj": cnpj, "representante": rep, "telefone": tel, "endereco": end, 
-                        "plano": plano, "login": lo, "senha": h(se), "link_planilha": lk,
-                        "data_expiracao": (datetime.now() + timedelta(days=365)).isoformat()
-                    }
-                    try:
-                        sb.table("empresas").insert(dt).execute()
-                        st.success("Empresa cadastrada!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-        
-        st.write("---")
-        try:
-            em = sb.table("empresas").select("nome_empresa, cnpj, plano").execute()
-            if em.data:
-                st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
-        except Exception:
-            pass
+                st.download_button("📥 EXPORTAR CSV", df_empresa.

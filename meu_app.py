@@ -4,142 +4,85 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- ESTILO E LOGO ---
-st.set_page_config(page_title="RRB Auditoria", layout="wide")
+# --- CONFIGURAÇÃO DA PÁGINA ---
+st.set_page_config(page_title="RRB Auditoria", layout="wide", initial_sidebar_state="expanded")
+
+# Estilos CSS para melhorar o visual
 st.markdown("""<style>
-    .stMetric { background: white; padding: 15px; border-radius: 10px; 
-    border-left: 5px solid #002D62; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .logo { font-size: 26px; font-weight: bold; color: #002D62; }
+    .stMetric { background: white; padding: 15px; border-radius: 10px; border-left: 5px solid #002D62; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .logo-text { font-size: 26px; font-weight: bold; color: #002D62; margin-bottom: 20px; }
 </style>""", unsafe_allow_html=True)
 
 def logo():
-    st.markdown("<div class='logo'>🛡️ RRB SOLUÇÕES</div>", unsafe_allow_html=True)
+    st.markdown("<div class='logo-text'>🛡️ RRB SOLUÇÕES AUDITORIA</div>", unsafe_allow_html=True)
     st.write("---")
 
-# --- CONEXÃO ---
+# --- CONEXÃO SUPABASE ---
 try:
-    su, sk = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+    su = st.secrets["SUPABASE_URL"]
+    sk = st.secrets["SUPABASE_KEY"]
     sb = create_client(su, sk)
-except:
-    st.error("Erro nos Secrets (URL/KEY do Supabase)"); st.stop()
+except Exception as e:
+    st.error("Erro ao carregar credenciais do Supabase. Verifique os Secrets.")
+    st.stop()
 
-def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
+def h(p): 
+    return hashlib.sha256(str.encode(p)).hexdigest()
 
-# --- NAVEGAÇÃO LATERAL ---
-st.sidebar.title("PAINEL RRB")
-m = st.sidebar.radio("Navegação", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin"])
+# --- NAVEGAÇÃO ---
+st.sidebar.title("MENU PRINCIPAL")
+menu = st.sidebar.radio("Ir para:", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin"])
 
-# --- 1. MÓDULO FUNCIONÁRIO ---
-if m == "👤 Funcionário":
+# --- MÓDULO 1: FUNCIONÁRIO ---
+if menu == "👤 Funcionário":
     logo()
-    cpf_input = st.text_input("Digite seu CPF")
-    c = "".join(filter(str.isdigit, cpf_input))
-    if st.button("BUSCAR") and c:
-        r = sb.table("resultados_auditoria").select("*").eq("cpf", c).execute()
-        if r.data:
-            d = r.data[-1]
-            st.success(f"Olá, {d['nome_funcionario']}")
+    cpf_raw = st.text_input("Informe seu CPF (apenas números)")
+    cpf_clean = "".join(filter(str.isdigit, cpf_raw))
+    
+    if st.button("CONSULTAR AUDITORIA") and cpf_clean:
+        res = sb.table("resultados_auditoria").select("*").eq("cpf", cpf_clean).execute()
+        if res.data:
+            # Pega o registro mais recente
+            dados = res.data[-1]
+            st.success(f"Bem-vindo(a), {dados['nome_funcionario']}")
             
             c1, c2, c3 = st.columns(3)
-            # Calculando progresso simples baseado no histórico de registros se houver
-            pg = len([x for x in r.data if x.get('contrato_id') == d.get('contrato_id')])
-            tt = int(d['parcelas_total']) if d.get('parcelas_total') else 0
+            val_rh = dados.get('valor_rh', 0)
+            val_bc = dados.get('valor_banco', 0)
+            diff = dados.get('diferenca', 0)
             
-            c1.metric("Parcelas", f"{pg}/{tt}")
-            c1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):.2f}")
-            c2.metric("Banco", d.get('banco_nome', 'N/A'))
-            c3.metric("Status", "✅ OK" if d['diferenca']==0 else "❌ Erro")
+            c1.metric("Mensalidade (RH)", f"R$ {val_rh:,.2f}")
+            c2.metric("Banco", dados.get('banco_nome', 'N/A'))
+            c3.metric("Status Auditoria", "✅ OK" if diff == 0 else "❌ Divergência")
             
-            if tt > 0: 
-                st.progress(min(1.0, pg/tt))
+            with st.expander("Ver Detalhes do Contrato"):
+                st.write(f"**Contrato:** {dados.get('contrato_id', 'N/A')}")
+                st.write(f"**Parcelas Totais:** {dados.get('parcelas_total', 0)}")
+                if diff != 0:
+                    st.warning(f"Atenção: Identificamos uma diferença de R$ {diff:,.2f} entre o RH e o Banco.")
         else:
-            st.warning("CPF não encontrado na base de auditoria.")
+            st.warning("CPF não localizado. Entre em contato com o RH da sua empresa.")
 
-# --- 2. MÓDULO EMPRESA ---
-elif m == "🏢 Empresa":
+# --- MÓDULO 2: EMPRESA ---
+elif menu == "🏢 Empresa":
     logo()
-    if 'at' not in st.session_state: st.session_state.at = False
+    if 'autenticado' not in st.session_state:
+        st.session_state.autenticado = False
     
-    if not st.session_state.at:
-        u_i, p_i = st.text_input("Usuário"), st.text_input("Senha", type='password')
-        if st.button("ACESSAR"):
-            q = sb.table("empresas").select("*").eq("login", u_i).execute()
-            if q.data and h(p_i) == q.data[0]['senha']:
-                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
-                st.session_state.lk = q.data[0].get('link_planilha')
+    if not st.session_state.autenticado:
+        u_in = st.text_input("Usuário Empresa")
+        p_in = st.text_input("Senha", type='password')
+        if st.button("ENTRAR"):
+            query = sb.table("empresas").select("*").eq("login", u_in).execute()
+            if query.data and h(p_in) == query.data[0]['senha']:
+                st.session_state.autenticado = True
+                st.session_state.nome_emp = query.data[0]['nome_empresa']
+                st.session_state.url_planilha = query.data[0].get('link_planilha')
                 st.rerun()
             else:
-                st.error("Credenciais inválidas")
+                st.error("Usuário ou senha inválidos.")
     else:
-        st.subheader(f"🏢 Gestão: {st.session_state.n}")
-        if st.sidebar.button("SAIR"): 
-            st.session_state.at = False
+        st.subheader(f"Painel de Gestão: {st.session_state.nome_emp}")
+        if st.sidebar.button("LOGOUT"): 
+            st.session_state.autenticado = False
             st.rerun()
-        
-        with st.expander("📥 Sincronização de Dados"):
-            if st.button("SINCRONIZAR AGORA"):
-                try:
-                    df = pd.read_csv(st.session_state.lk)
-                    df.columns = df.columns.str.strip().str.lower()
-                    
-                    for _, r in df.iterrows():
-                        vr = float(pd.to_numeric(r.get('valor_rh', 0), 'coerce') or 0)
-                        vb = float(pd.to_numeric(r.get('valor_banco', 0), 'coerce') or 0)
-                        ve = float(pd.to_numeric(r.get('valor_emprestimo', 0), 'coerce') or 0)
-                        tp = int(pd.to_numeric(r.get('total_parcelas', 0), 'coerce') or 0)
-                        clean_cpf = "".join(filter(str.isdigit, str(r['cpf'])))
-                        
-                        p = {
-                            "nome_empresa": st.session_state.n,
-                            "cpf": clean_cpf,
-                            "nome_funcionario": str(r['nome']),
-                            "valor_rh": vr,
-                            "valor_banco": vb,
-                            "valor_emprestimo": ve,
-                            "diferenca": round(vr - vb, 2),
-                            "banco_nome": str(r.get('banco', 'N/A')),
-                            "contrato_id": str(r.get('contrato', 'N/A')),
-                            "parcelas_total": tp,
-                            "data_processamento": datetime.now().isoformat()
-                        }
-                        # Usa upsert para não duplicar dados identicos (CPF + Contrato)
-                        sb.table("resultados_auditoria").upsert(p).execute()
-                        
-                    st.success("Sincronização realizada com sucesso!")
-                except Exception as e: 
-                    st.error(f"Erro: {e}")
-
-        # VISUALIZAÇÃO
-        res = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
-        if res.data:
-            f_df = pd.DataFrame(res.data)
-            v_l = []
-            for ct in f_df['contrato_id'].unique():
-                cd = f_df[f_df['contrato_id'] == ct]
-                rw = cd.iloc[-1]
-                v_l.append({
-                    "Funcionário": rw['nome_funcionario'],
-                    "CPF": rw['cpf'],
-                    "Banco": rw['banco_nome'],
-                    "Desc. Empresa": f"R$ {rw['valor_rh']:.2f}",
-                    "Parc. Banco": f"R$ {rw['valor_banco']:.2f}",
-                    "Diferença": f"R$ {rw['diferenca']:.2f}",
-                    "Status": "✅ OK" if rw['diferenca'] == 0 else "⚠️ Erro"
-                })
-            st.table(pd.DataFrame(v_l))
-
-# --- 3. MÓDULO ADMIN ---
-elif m == "⚙️ Admin":
-    logo()
-    if st.text_input("Master", type='password') == st.secrets.get("SENHA_MASTER"):
-        with st.form("cad_emp"):
-            c1, c2 = st.columns(2)
-            rs, cj = c1.text_input("Razão Social"), c2.text_input("CNPJ")
-            us, sn = c1.text_input("Usuário"), c2.text_input("Senha", type='password')
-            lk = st.text_input("Link CSV")
-            if st.form_submit_button("CADASTRAR"):
-                v = (datetime.now() + timedelta(30)).isoformat()
-                d = {"nome_empresa": rs, "cnpj": cj, "login": us, "senha": h(sn), 
-                     "link_planilha": lk, "data_expiracao": v}
-                sb.table("empresas").insert(d).execute()
-                st.success("Empresa cadastrada!")

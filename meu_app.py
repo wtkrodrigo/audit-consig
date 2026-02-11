@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURAÇÃO E ESTILO (O ESCUDO E LOGO) ---
+# --- 1. CONFIGURAÇÃO E ESTILO ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
 st.markdown("""<style>
@@ -28,7 +28,8 @@ def render_header(titulo):
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except Exception as e:
-    st.error("Erro de conexão com o banco de dados."); st.stop()
+    st.error("Erro de conexão com o banco de dados. Verifique os Secrets.")
+    st.stop()
 
 def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 
@@ -45,19 +46,38 @@ if menu == "👤 Funcionário":
         r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
         if r.data:
             d = r.data[-1]
-            st.success(f"Bem-vindo, {d['nome_funcionario']}")
-            
+            st.success(f"Bem-vindo, {d.get('nome_funcionario', 'Usuário')}")
             c1, c2, c3 = st.columns(3)
             c1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
             c2.metric("Banco", d.get('banco_nome', 'N/A'))
             status = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
             c3.metric("Status", status)
             
-            # Cálculo de parcelas para o funcionário
-            total_parc = int(d.get('parcelas_total', 0))
-            pagas_parc = int(d.get('parcelas_pagas', 0))
-            restantes_parc = max(0, total_parc - pagas_parc)
+            # Detalhamento de Parcelas
+            t_parc = int(d.get('parcelas_total', 0))
+            p_parc = int(d.get('parcelas_pagas', 0))
+            r_parc = max(0, t_parc - p_parc)
             
-            with st.expander("📊 Detalhamento do Empréstimo"):
-                col_a, col_b = st.columns(2)
-                col_a.write(f"**Valor do Empréstimo:** R
+            with st.expander("Detalhamento do Empréstimo", expanded=True):
+                st.write(f"**Valor do Empréstimo:** R$ {d.get('valor_emprestimo', 0):,.2f}")
+                st.write(f"**Contrato:** {d.get('contrato_id', 'N/A')}")
+                st.write(f"**✅ Parcelas Pagas:** {p_parc}")
+                st.write(f"**⏳ Parcelas Restantes:** {r_parc}")
+                st.write(f"**📊 Total do Contrato:** {t_parc}")
+                if t_parc > 0:
+                    st.progress(min(1.0, p_parc / t_parc))
+        else:
+            st.warning("Nenhum dado encontrado para este CPF.")
+
+# --- MÓDULO EMPRESA ---
+elif menu == "🏢 Empresa":
+    render_header("Painel da Empresa")
+    if 'at' not in st.session_state: st.session_state.at = False
+    
+    if not st.session_state.at:
+        with st.container():
+            u = st.text_input("Usuário Corporativo")
+            p = st.text_input("Senha", type='password')
+            if st.button("ACESSAR PAINEL"):
+                q = sb.table("empresas").select("*").eq("login", u).execute()
+                if q.data and h(p) == q.data

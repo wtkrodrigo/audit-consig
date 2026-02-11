@@ -46,7 +46,6 @@ if menu == "👤 Funcionário":
         r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
         if r.data:
             d = r.data[-1]
-            # Lógica de Cruzamento: Data e Final do Telefone
             val_data = str(dt_nasc_in) == str(d.get("data_nascimento", ""))
             val_fone = str(d.get("telefone", "")).endswith(tel_fim_in)
             
@@ -81,11 +80,8 @@ elif menu == "🏢 Empresa":
             else: st.error("Login inválido.")
     else:
         st.subheader(f"Gestão: {st.session_state.n}")
-        
-        # Botões de Ação
         c_act1, c_act2, _ = st.columns([1, 1, 2])
         
-        # Carregar dados atuais para busca/exportação
         res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
         df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
 
@@ -123,33 +119,25 @@ elif menu == "🏢 Empresa":
                 df_empresa = df_empresa[df_empresa['nome_funcionario'].str.contains(busca, case=False, na=False) | df_empresa['cpf'].str.contains(busca, na=False)]
             st.dataframe(df_empresa, use_container_width=True, hide_index=True)
 
-# --- MÓDULO ADMIN MASTER ---
+# --- MÓDULO ADMIN MASTER (COM DASHBOARD) ---
 elif menu == "⚙️ Admin Master":
-    render_header("Configurações Master")
+    render_header("Painel Master & Dashboard")
     if st.sidebar.text_input("Chave Master", type='password') == st.secrets.get("SENHA_MASTER", "RRB123"):
-        with st.form("f_adm_master"):
-            st.subheader("📝 Cadastrar Nova Empresa")
-            c1, c2, c3 = st.columns([2, 1, 1])
-            razao, cnpj, plano = c1.text_input("Razão Social"), c2.text_input("CNPJ"), c3.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
-            c4, c5, c6 = st.columns([1, 1, 2])
-            rep, tel, end = c4.text_input("Representante"), c5.text_input("Telefone"), c6.text_input("Endereço")
-            st.divider()
-            c7, c8, c9 = st.columns(3)
-            lo, se, lk = c7.text_input("Login Admin"), c8.text_input("Senha", type='password'), c9.text_input("URL Planilha (CSV)")
-            if st.form_submit_button("✅ SALVAR EMPRESA"):
-                if razao and lo and se:
-                    dt = {
-                        "nome_empresa": razao, "cnpj": cnpj, "representante": rep, "telefone": tel, "endereco": end, 
-                        "plano": plano, "login": lo, "senha": h(se), "link_planilha": lk,
-                        "data_expiracao": (datetime.now() + timedelta(days=365)).isoformat()
-                    }
-                    try:
-                        sb.table("empresas").insert(dt).execute()
-                        st.success("Empresa cadastrada!"); st.rerun()
-                    except Exception as e: st.error(f"Erro: {e}")
         
-        st.write("---")
+        # DASHBOARD DE RESUMO
         try:
-            em = sb.table("empresas").select("nome_empresa, cnpj, plano").execute()
-            if em.data: st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
+            total_e = sb.table("empresas").select("id", count='exact').execute().count
+            total_a = sb.table("resultados_auditoria").select("id", count='exact').execute().count
+            err = sb.table("resultados_auditoria").select("id").neq("diferenca", 0).execute()
+            total_err = len(err.data) if err.data else 0
+            
+            d1, d2, d3 = st.columns(3)
+            d1.metric("🏢 Empresas", total_e if total_e else 0)
+            d2.metric("👥 Auditorias", total_a if total_a else 0)
+            d3.metric("⚠️ Divergências", total_err, delta_color="inverse")
+            st.divider()
         except: pass
+
+        with st.form("f_adm_master"):
+            st.subheader("📝 Cadastrar Empresa")
+            c1, c2

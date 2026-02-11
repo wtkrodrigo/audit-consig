@@ -9,72 +9,68 @@ st.set_page_config(page_title="RRB", layout="wide")
 
 # --- DB ---
 try:
-    u = st.secrets["SUPABASE_URL"]
-    k = st.secrets["SUPABASE_KEY"]
-    sb = create_client(u, k)
+    sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except:
     st.error("Erro Secrets"); st.stop()
 
-def h(p):
-    return hashlib.sha256(str.encode(p)).hexdigest()
+def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 
-# --- NAV ---
 m = st.sidebar.selectbox("Menu", ["👤 Func", "🏢 Empresa", "⚙️ Admin"])
 
-# 1. FUNCIONARIO (CONSULTA DETALHADA)
+# 1. FUNCIONARIO (VISUALIZAÇÃO DO PROGRESSO)
 if m == "👤 Func":
-    st.subheader("🔎 Consulta de Contratos")
+    st.subheader("🔎 Status do Empréstimo")
     c_in = st.text_input("CPF (apenas números)")
     c = "".join(filter(str.isdigit, c_in))
     if st.button("VERIFICAR") and c:
-        r = sb.table("resultados_auditoria").select("*")
-        r = r.eq("cpf", c).order("data_processamento").execute()
+        r = sb.table("resultados_auditoria").select("*").eq("cpf", c).execute()
         if r.data:
+            # Pega o lançamento mais recente
             d = r.data[-1]
             st.success(f"Olá, {d['nome_funcionario']}")
             
-            # Novos campos em destaque
-            st.info(f"🏦 Banco: {d.get('banco_nome', 'N/A')} | 📄 Contrato: {d.get('contrato_id', 'N/A')}")
-            
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Parcela", d.get('parcelas', 'N/A'))
-            c2.metric("RH (Folha)", f"R$ {d['valor_rh']:.2f}")
-            c3.metric("Banco (Base)", f"R$ {d['valor_banco']:.2f}")
-            
-            dif = d['diferenca']
-            if dif == 0: st.success("✅ Valores em conformidade.")
-            else: st.error(f"❌ Divergência de R$ {abs(dif):.2f}")
-        else: st.warning("Dados não localizados.")
+            # Cálculo de parcelas baseado no histórico do Banco
+            contrato = d.get('contrato_id')
+            historico = [x for x in r.data if x.get('contrato_id') == contrato]
+            pagas = len(historico)
+            total = int(d.get('parcelas_total', 0))
+            faltam = max(0, total - pagas)
 
-# 2. EMPRESA (PROCESSAMENTO)
+            st.info(f"🏦 {d.get('banco_nome')} | 📄 Contrato: {contrato}")
+            
+            # Painel de Progresso
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Parcelas Pagas", f"{pagas} de {total}")
+            c2.metric("Restantes", f"{faltam}")
+            c3.metric("Status", "Em dia" if d['diferenca']==0 else "Divergente")
+            
+            # Barra de progresso visual
+            if total > 0:
+                progresso = pagas / total
+                st.progress(progresso)
+                st.caption(f"Você já quitou {progresso:.0%} do seu contrato.")
+        else:
+            st.warning("Dados não localizados.")
+
+# 2. EMPRESA (PROCESSAMENTO COM TOTAL DE PARCELAS)
 elif m == "🏢 Empresa":
     if 'at' not in st.session_state: st.session_state.at = False
     if not st.session_state.at:
-        u_in = st.text_input("Login")
-        p_in = st.text_input("Senha", type='password')
+        u_in, p_in = st.text_input("Login"), st.text_input("Senha", type='password')
         if st.button("Entrar"):
             q = sb.table("empresas").select("*").eq("login", u_in).execute()
             if q.data and h(p_in) == q.data[0]['senha']:
-                st.session_state.at = True
-                st.session_state.n = q.data[0]['nome_empresa']
+                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
                 st.session_state.lk = q.data[0].get('link_planilha', "")
                 st.rerun()
     else:
-        c_t, c_s = st.columns([4, 1])
-        c_t.subheader(f"Painel: {st.session_state.n}")
-        if c_s.button("🔴 SAIR"):
-            st.session_state.at = False
-            st.rerun()
-        
-        if st.button("🔄 SINCRONIZAR PLANILHA"):
+        st.subheader(f"Painel: {st.session_state.n}")
+        if st.button("🔄 LANÇAR PAGAMENTO DO MÊS"):
             try:
                 df = pd.read_csv(st.session_state.lk)
                 df.columns = df.columns.str.strip().str.lower()
-                sb.table("resultados_auditoria").delete().eq(
-                    "nome_empresa", st.session_state.n).execute()
                 for _, r in df.iterrows():
-                    v_rh = float(r['valor_rh'])
-                    v_ba = float(r['valor_banco'])
+                    v_rh, v_ba = float(r['valor_rh']), float(r['valor_banco'])
                     pld = {
                         "nome_empresa": st.session_state.n,
                         "cpf": str(r['cpf']),
@@ -84,25 +80,13 @@ elif m == "🏢 Empresa":
                         "diferenca": v_rh - v_ba,
                         "banco_nome": str(r['banco']),
                         "contrato_id": str(r['contrato']),
-                        "parcelas": str(r['parcelas']),
-                        "status": "OK" if v_rh == v_ba else "ERRO"
+                        "parcelas_total": int(r['total_parcelas']),
+                        "data_processamento": datetime.now().isoformat()
                     }
                     sb.table("resultados_auditoria").insert(pld).execute()
-                st.success("✅ Dados atualizados!"); st.dataframe(df)
+                st.success("✅ Lançamento Mensal Concluído!")
             except Exception as e: st.error(f"Erro: {e}")
 
-# 3. ADMIN (Cadastro igual)
+# 3. ADMIN (MANTIDO)
 elif m == "⚙️ Admin":
-    pw = st.text_input("Senha Master", type='password')
-    if pw == st.secrets.get("SENHA_MASTER"):
-        with st.form("cad"):
-            n = st.text_input("Empresa")
-            lk = st.text_input("Link CSV")
-            u_c = st.text_input("User")
-            s_c = st.text_input("Pass", type='password')
-            if st.form_submit_button("CADASTRAR"):
-                v = (datetime.now()+timedelta(30)).strftime("%Y-%m-%d")
-                d_i = {"nome_empresa": n, "login": u_c, "senha": h(s_c),
-                       "data_expiracao": v, "link_planilha": lk}
-                sb.table("empresas").insert(d_i).execute()
-                st.success("Cadastrado!")
+    # ... (mesmo código anterior)

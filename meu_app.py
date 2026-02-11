@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- 1. DESIGN SYSTEM & CSS (SINTAXE LIMPA) ---
+# --- 1. DESIGN SYSTEM ADAPTATIVO ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide", page_icon="🛡️")
 
 st.markdown("""
@@ -12,24 +12,35 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-    /* Glassmorphism nas métricas */
+    /* Métrica Adaptativa (Usa as variáveis do Streamlit) */
     [data-testid="stMetric"] {
-        background: rgba(28, 131, 225, 0.03);
-        border: 1px solid rgba(0, 45, 98, 0.1);
+        background: var(--secondary-background-color);
+        border: 1px solid rgba(128, 128, 128, 0.2);
         padding: 20px;
         border-radius: 16px;
         border-top: 5px solid #002D62;
         box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        color: var(--text-color);
     }
 
-    /* Barra Lateral */
-    section[data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #dee2e6; }
-    
-    /* Cabeçalho Sofisticado */
+    /* Ajuste para o Título da Métrica no Modo Dark */
+    [data-testid="stMetricLabel"] {
+        color: var(--text-color);
+        opacity: 0.8;
+    }
+
+    /* Cabeçalho Fixo (Mantém a autoridade visual em ambos os modos) */
     .header-box {
         background: linear-gradient(135deg, #002D62 0%, #001529 100%);
         padding: 25px; border-radius: 15px; color: white;
         margin-bottom: 30px; display: flex; align-items: center; gap: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    /* Inputs e Selects adaptativos */
+    .stTextInput>div>div>input, .stSelectbox>div>div>div {
+        background-color: var(--background-color);
+        color: var(--text-color);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -41,8 +52,8 @@ def render_header(titulo):
             <span style="font-size: 35px;">🛡️</span>
         </div>
         <div>
-            <div style="font-size: 26px; font-weight: 800; line-height: 1.1;">RRB SOLUÇÕES</div>
-            <div style="font-size: 15px; opacity: 0.8;">{titulo}</div>
+            <div style="font-size: 26px; font-weight: 800; line-height: 1.1; color: white;">RRB SOLUÇÕES</div>
+            <div style="font-size: 15px; opacity: 0.8; color: white;">{titulo}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -81,7 +92,7 @@ if menu == "👤 Funcionário":
     render_header("Área do Colaborador")
     with st.container():
         c1, c2 = st.columns(2)
-        cpf_in = c1.text_input("🆔 CPF (apenas números)", placeholder="00000000000")
+        cpf_in = c1.text_input("🆔 CPF (apenas números)", placeholder="Ex: 12345678900")
         dt_nasc_in = c2.date_input("📅 Data de Nascimento", min_value=datetime(1930,1,1), format="DD/MM/YYYY")
         tel_fim_in = st.text_input("📞 Últimos 4 dígitos do telefone cadastrado", max_chars=4)
         c_clean = "".join(filter(str.isdigit, cpf_in))
@@ -91,7 +102,6 @@ if menu == "👤 Funcionário":
             r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
             if r.data:
                 d = r.data[-1]
-                # Validação idêntica ao código original
                 if str(dt_nasc_in) == str(d.get("data_nascimento")) and str(d.get("telefone", "")).endswith(tel_fim_in):
                     st.success(f"Olá, {d.get('nome_funcionario')}!")
                     m1, m2, m3 = st.columns(3)

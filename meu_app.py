@@ -13,7 +13,6 @@ st.markdown("""
     .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 26px; font-weight: bold; color: #002D62; }
-    .admin-card { background: white; padding: 25px; border-radius: 12px; border: 1px solid #eee; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,7 +28,7 @@ try:
     s_k = st.secrets["SUPABASE_KEY"]
     sb = create_client(s_u, s_k)
 except Exception:
-    st.error("Erro nos Secrets do Supabase.")
+    st.error("Erro nos Secrets. Verifique as chaves no Streamlit.")
     st.stop()
 
 def h(p):
@@ -49,7 +48,7 @@ if menu == "👤 Funcionário":
         c1, c2 = st.columns(2)
         cpf_in = c1.text_input("CPF (somente números)")
         dt_nasc = c2.date_input("Data de Nascimento", min_value=datetime(1940, 1, 1), format="DD/MM/YYYY")
-        tel_fim = st.text_input("Últimos 4 dígitos do seu telefone", max_chars=4)
+        tel_fim = st.text_input("Últimos 4 dígitos do seu celular", max_chars=4)
         c_clean = "".join(filter(str.isdigit, cpf_in))
         
     if st.button("CONSULTAR") and c_clean:
@@ -58,9 +57,19 @@ if menu == "👤 Funcionário":
             d = r.data[-1]
             v_dt = str(dt_nasc) == str(d.get("data_nascimento", ""))
             v_tl = str(d.get("telefone", "")).endswith(tel_fim)
+            
             if v_dt and v_tl:
                 st.success(f"Bem-vindo, {d['nome_funcionario']}")
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
                 m2.metric("Banco", d.get('banco_nome', 'N/A'))
-                status = "✅ CONFORME" if d.get
+                
+                # Lógica de Status Separada para evitar SyntaxError
+                status_final = "✅ CONFORME"
+                if d.get('diferenca', 0) != 0:
+                    status_final = "⚠️ DIVERGÊNCIA"
+                m3.metric("Status", status_final)
+                
+                with st.expander("Ver Detalhes do Contrato"):
+                    st.write(f"**Contrato:** {d.get('contrato_id', 'N/A')}")
+                    p_p = int(d.get("parcelas_pagas", 0

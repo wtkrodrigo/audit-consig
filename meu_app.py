@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA LINHA DO ST) ---
+# --- 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA INHA) ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
 st.markdown("""<style>
@@ -22,9 +22,10 @@ def render_header(titulo):
 
 # --- 2. CONEXÃO ---
 try:
-    sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-except:
-    st.error("Erro de conexão."); st.stop()
+    U, K = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+    sb = create_client(U, K)
+except Exception as e:
+    st.error("Erro nos Secrets do Supabase. Verifique as chaves."); st.stop()
 
 def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 
@@ -44,37 +45,8 @@ if menu == "👤 Funcionário":
         r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
         if r.data:
             d = r.data[-1]
-            if str(dt_nasc_in) == str(d.get("data_nascimento", "")) and str(d.get("telefone", "")).endswith(tel_fim_in):
-                st.success(f"Bem-vindo, {d['nome_funcionario']}")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
-                m2.metric("Banco", d.get('banco_nome', 'N/A'))
-                m3.metric("Status", "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA")
-                with st.expander("📊 Detalhes do Contrato"):
-                    st.write(f"**Empréstimo:** R$ {d.get('valor_emprestimo', 0):,.2f}")
-                    pp, pt = int(d.get('parcelas_pagas', 0)), int(d.get('parcelas_total', 0))
-                    st.write(f"**Parcelas:** {pp} de {pt}")
-                    if pt > 0: st.progress(min(pp/pt, 1.0))
-            else: st.error("Dados de validação incorretos.")
-        else: st.warning("CPF não localizado.")
-
-# --- MÓDULO EMPRESA ---
-elif menu == "🏢 Empresa":
-    render_header("Painel da Empresa")
-    if 'at' not in st.session_state: st.session_state.at = False
-    if not st.session_state.at:
-        u = st.text_input("Usuário"); p = st.text_input("Senha", type='password')
-        if st.button("ACESSAR"):
-            q = sb.table("empresas").select("*").eq("login", u).execute()
-            if q.data and h(p) == q.data[0]['senha']:
-                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
-                st.session_state.lk = q.data[0].get('link_planilha'); st.rerun()
-            else: st.error("Login inválido.")
-    else:
-        st.subheader(f"Gestão: {st.session_state.n}")
-        col_b1, col_b2, col_b3 = st.columns([1, 1, 2])
-        res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
-        if res_db.data:
-            df_res = pd.DataFrame(res_db.data)
-            with col_b2:
-                st.download_button("📥 EXPORTAR", df_res.to_csv(index=False).encode
+            # Validação de Segurança
+            val_dt = str(dt_nasc_in) == str(d.get("data_nascimento", ""))
+            val_tl = str(d.get("telefone", "")).endswith(tel_fim_in)
+            
+            if val_

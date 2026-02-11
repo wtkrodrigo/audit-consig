@@ -7,6 +7,11 @@ from datetime import datetime, timedelta
 # --- CONFIG ---
 st.set_page_config(page_title="RRB", layout="wide")
 
+st.markdown("""<style>
+    .stMetric { background: white; padding: 15px; 
+    border-radius: 10px; border-left: 5px solid #002D62; }
+</style>""", unsafe_allow_html=True)
+
 # --- CONEXÃO ---
 try:
     s_url = st.secrets["SUPABASE_URL"]
@@ -18,7 +23,7 @@ except:
 def h(p):
     return hashlib.sha256(str.encode(p)).hexdigest()
 
-# --- NAVEGAÇÃO ---
+# --- NAV ---
 m = st.sidebar.selectbox("Módulo", ["👤 Func", "🏢 Empresa", "⚙️ Admin"])
 
 # 1. FUNCIONÁRIO
@@ -45,9 +50,10 @@ if m == "👤 Func":
         else:
             st.warning("Não encontrado.")
 
-# 2. EMPRESA (COM LIMPEZA ANTI-NAN)
+# 2. EMPRESA
 elif m == "🏢 Empresa":
-    if 'at' not in st.session_state: st.session_state.at = False
+    if 'at' not in st.session_state: 
+        st.session_state.at = False
     if not st.session_state.at:
         u_in = st.text_input("Login")
         p_in = st.text_input("Senha", type='password')
@@ -63,31 +69,23 @@ elif m == "🏢 Empresa":
         if c_s.button("🔴 SAIR"):
             st.session_state.at = False; st.rerun()
             
-        if st.button("🔄 LANÇAR PAGAMENTO"):
+        if st.button("🔄 ATUALIZAR E MOSTRAR LISTA"):
             try:
-                df = pd.read_csv(st.session_state.lk)
-                df.columns = df.columns.str.strip().str.lower()
-                
-                # Remove linhas completamente vazias
-                df = df.dropna(subset=['cpf', 'nome'])
-                
-                for _, r in df.iterrows():
-                    # Conversão segura para evitar o erro de JSON/NaN
+                df_raw = pd.read_csv(st.session_state.lk)
+                df_raw.columns = df_raw.columns.str.strip().str.lower()
+                df_raw = df_raw.dropna(subset=['cpf', 'nome'])
+                for _, r in df_raw.iterrows():
                     v_rh = pd.to_numeric(r['valor_rh'], errors='coerce')
                     v_ba = pd.to_numeric(r['valor_banco'], errors='coerce')
                     t_pa = pd.to_numeric(r['total_parcelas'], errors='coerce')
-                    
-                    # Se for NaN, vira 0.0 ou 0
                     v_rh = 0.0 if pd.isna(v_rh) else float(v_rh)
                     v_ba = 0.0 if pd.isna(v_ba) else float(v_ba)
                     t_pa = 0 if pd.isna(t_pa) else int(t_pa)
-                    
                     pld = {
                         "nome_empresa": st.session_state.n,
                         "cpf": str(r['cpf']),
                         "nome_funcionario": str(r['nome']),
-                        "valor_rh": v_rh, 
-                        "valor_banco": v_ba,
+                        "valor_rh": v_rh, "valor_banco": v_ba,
                         "diferenca": v_rh - v_ba,
                         "banco_nome": str(r.get('banco', 'N/A')),
                         "contrato_id": str(r.get('contrato', 'N/A')),
@@ -95,22 +93,5 @@ elif m == "🏢 Empresa":
                         "data_processamento": datetime.now().isoformat()
                     }
                     sb.table("resultados_auditoria").insert(pld).execute()
-                st.success("✅ Sincronizado com Sucesso!")
+                st.success("✅ Sincronizado!")
             except Exception as e:
-                st.error(f"Erro ao processar: {e}")
-
-# 3. ADMIN
-elif m == "⚙️ Admin":
-    pw = st.text_input("Senha Master", type='password')
-    if pw == st.secrets.get("SENHA_MASTER"):
-        with st.form("cad_rrb"):
-            n = st.text_input("Empresa")
-            lk = st.text_input("Link CSV")
-            u_c = st.text_input("User")
-            s_c = st.text_input("Pass", type='password')
-            if st.form_submit_button("CADASTRAR"):
-                v = (datetime.now()+timedelta(30)).strftime("%Y-%m-%d")
-                di = {"nome_empresa": n, "login": u_c, "senha": h(s_c),
-                      "data_expiracao": v, "link_planilha": lk}
-                sb.table("empresas").insert(di).execute()
-                st.success(f"Ativo até {v}")

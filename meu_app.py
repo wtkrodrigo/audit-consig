@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- 1. DESIGN SYSTEM ADAPTATIVO (LIGHT/DARK) ---
+# --- 1. DESIGN SYSTEM ADAPTATIVO ---
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide", page_icon="🛡️")
 
 st.markdown("""
@@ -12,7 +12,6 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-    /* Métrica Adaptativa */
     [data-testid="stMetric"] {
         background: var(--secondary-background-color);
         border: 1px solid rgba(128, 128, 128, 0.2);
@@ -22,21 +21,15 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
 
-    /* Cabeçalho Fixo */
     .header-box {
         background: linear-gradient(135deg, #002D62 0%, #001529 100%);
         padding: 25px; border-radius: 15px; color: white;
         margin-bottom: 30px; display: flex; align-items: center; gap: 20px;
     }
 
-    /* Rodapé de Direitos e Privacidade */
     .footer-note {
-        font-size: 12px;
-        color: var(--text-color);
-        opacity: 0.6;
-        text-align: center;
-        margin-top: 50px;
-        padding: 20px;
+        font-size: 12px; color: var(--text-color); opacity: 0.6;
+        text-align: center; margin-top: 50px; padding: 20px;
         border-top: 1px solid rgba(128, 128, 128, 0.2);
     }
 </style>
@@ -59,4 +52,5 @@ def render_footer():
     st.markdown(f"""
     <div class="footer-note">
         <p>© {datetime.now().year} RRB Soluções em Auditoria. Todos os direitos reservados.</p>
-        <p><b>Privacidade e
+        <p><b>Privacidade e Segurança:</b> Este sistema utiliza criptografia de ponta a ponta. 
+        Proteção total conforme LGPD.</p>

@@ -4,7 +4,7 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- CONFIG & STYLE ---
+# --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="RRB", layout="wide", page_icon="🛡️")
 st.markdown("""<style>
     .main { background: #f8f9fa; }
@@ -16,7 +16,7 @@ st.markdown("""<style>
 
 st.markdown('<div class="header"><div class="shield">🛡️</div><div class="brand">RRB<span style="color:#d90429">.</span>SOLUÇÕES</div></div>', unsafe_allow_html=True)
 
-# --- DATABASE ---
+# --- CONEXÃO ---
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except:
@@ -24,62 +24,9 @@ except:
 
 def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 
-# --- NAVIGATION ---
+# --- NAVEGAÇÃO ---
 m = st.sidebar.selectbox("Módulo", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin"])
 
-# 1. FUNCIONÁRIO
+# 1. MÓDULO FUNCIONÁRIO
 if m == "👤 Funcionário":
-    st.subheader("Consulta")
-    cpf_in = st.text_input("CPF")
-    cpf = "".join(filter(str.isdigit, cpf_in))
-    if st.button("VERIFICAR") and cpf:
-        r = sb.table("resultados_auditoria").select("*").eq("cpf", cpf).order("data_processamento", desc=True).limit(1).execute()
-        if r.data:
-            d = r.data[0]; st.success(f"Olá, {d['nome_funcionario']}")
-            c1, c2 = st.columns(2)
-            c1.metric("Folha RH", f"R$ {d['valor_rh']}")
-            c2.metric("Banco", f"R$ {d['valor_banco']}")
-            if d['diferenca'] == 0: st.info("✅ Tudo em dia")
-            else: st.error(f"❌ Diferença: R$ {abs(d['diferenca'])}")
-        else: st.warning("Não encontrado.")
-
-# 2. EMPRESA
-elif m == "🏢 Empresa":
-    if 'at' not in st.session_state: st.session_state.at = False
-    if not st.session_state.at:
-        u = st.text_input("Login")
-        p = st.text_input("Senha", type='password')
-        if st.button("Entrar"):
-            q = sb.table("empresas").select("*").eq("login", u).execute()
-            if q.data and h(p) == q.data[0]['senha']:
-                exp = datetime.strptime(q.data[0]['data_expiracao'], "%Y-%m-%d")
-                if datetime.now() > exp: st.error("Acesso Expirado")
-                else: st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']; st.rerun()
-            else: st.error("Login Inválido")
-    else:
-        st.subheader(f"Gestão: {st.session_state.n}")
-        f1, f2 = st.file_uploader("RH"), st.file_uploader("Banco")
-        if f1 and f2:
-            df1, df2 = pd.read_csv(f1), pd.read_csv(f2)
-            res = pd.merge(df1, df2, on='cpf')
-            res['dif'] = res['valor_descontado_rh'] - res['valor_devido_banco']
-            st.metric("Total CPFs", len(res))
-            st.dataframe(res, use_container_width=True)
-            if st.button("🚀 PUBLICAR"):
-                sb.table("resultados_auditoria").delete().eq("nome_empresa", st.session_state.n).execute()
-                for _, r in res.iterrows():
-                    pl = {"nome_empresa": st.session_state.n, "cpf": str(r['cpf']), "nome_funcionario": r['nome'], "valor_rh": float(r['valor_descontado_rh']), "valor_banco": float(r['valor_devido_banco']), "diferenca": float(r['dif']), "status": "OK" if r['dif']==0 else "ERRO"}
-                    sb.table("resultados_auditoria").insert(pl).execute()
-                st.success("Publicado!")
-
-# 3. ADMIN
-elif m == "⚙️ Admin":
-    pw = st.text_input("Senha Master", type='password')
-    if pw and pw == st.secrets.get("SENHA_MASTER"):
-        with st.form("cad"):
-            n, l, s = st.text_input("Empresa"), st.text_input("User"), st.text_input("Pass", type='password')
-            d = st.number_input("Dias", 1, 365, 30)
-            if st.form_submit_button("CADASTRAR"):
-                v = (datetime.now() + timedelta(days=d)).strftime("%Y-%m-%d")
-                sb.table("empresas").insert({"nome_empresa": n, "login": l, "senha": h(s), "data_expiracao": v}).execute()
-                st.success(f"Ativo até {v}")
+    st.subheader("Consulta

@@ -35,7 +35,7 @@ def render_header(titulo):
     """, unsafe_allow_html=True)
     st.write("---")
 
-# --- 2. CONEXÃO ---
+# --- 2. CONEXÃO E FUNÇÕES AUXILIARES ---
 try:
     sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except:
@@ -43,8 +43,19 @@ except:
 
 def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
 
+def logout():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
 # --- 3. NAVEGAÇÃO ---
 menu = st.sidebar.radio("Selecione o Portal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+
+# Botão de Sair fixo na barra lateral se estiver logado como Empresa
+if menu == "🏢 Empresa" and st.session_state.get('at'):
+    st.sidebar.write("---")
+    if st.sidebar.button("🚪 Sair da Sessão"):
+        logout()
 
 # --- MÓDULO FUNCIONÁRIO ---
 if menu == "👤 Funcionário":
@@ -79,55 +90,74 @@ if menu == "👤 Funcionário":
 # --- MÓDULO EMPRESA ---
 elif menu == "🏢 Empresa":
     render_header("Painel da Empresa")
-    if 'at' not in st.session_state: st.session_state.at = False
     
+    if 'at' not in st.session_state: st.session_state.at = False
+    if 'reset_mode' not in st.session_state: st.session_state.reset_mode = False
+    
+    # --- FLUXO DE LOGIN / RESET ---
     if not st.session_state.at:
-        u = st.text_input("Usuário")
-        p = st.text_input("Senha", type='password')
-        if st.button("ACESSAR"):
-            q = sb.table("empresas").select("*").eq("login", u).execute()
-            if q.data and h(p) == q.data[0]['senha']:
-                st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
-                st.session_state.lk = q.data[0].get('link_planilha')
+        if not st.session_state.reset_mode:
+            # Tela de Login Normal
+            u = st.text_input("Usuário")
+            p = st.text_input("Senha", type='password')
+            col_btn1, col_btn2 = st.columns([1, 4])
+            if col_btn1.button("ACESSAR"):
+                q = sb.table("empresas").select("*").eq("login", u).execute()
+                if q.data and h(p) == q.data[0]['senha']:
+                    st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
+                    st.session_state.lk = q.data[0].get('link_planilha')
+                    st.rerun()
+                else: st.error("Login ou senha inválidos.")
+            
+            if st.button("Esqueci minha senha"):
+                st.session_state.reset_mode = True
                 st.rerun()
-            else: st.error("Login inválido.")
+        else:
+            # Tela de Recuperação de Senha
+            st.subheader("🔑 Recuperar Senha")
+            user_reset = st.text_input("Confirme seu Usuário")
+            cnpj_reset = st.text_input("Confirme o CNPJ da Empresa (apenas números)")
+            nova_senha = st.text_input("Nova Senha", type="password")
+            
+            c_res1, c_res2 = st.columns(2)
+            if c_res1.button("ATUALIZAR SENHA"):
+                check = sb.table("empresas").select("*").eq("login", user_reset).eq("cnpj", cnpj_reset).execute()
+                if check.data:
+                    sb.table("empresas").update({"senha": h(nova_senha)}).eq("login", user_reset).execute()
+                    st.success("Senha atualizada com sucesso!")
+                    st.session_state.reset_mode = False
+                    st.rerun()
+                else:
+                    st.error("Dados não conferem. Verifique o usuário e o CNPJ.")
+            
+            if c_res2.button("Voltar ao Login"):
+                st.session_state.reset_mode = False
+                st.rerun()
+    
+    # --- PAINEL LOGADO ---
     else:
         st.subheader(f"Gestão: {st.session_state.n}")
         
-        # Carregar dados
         res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
         df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
 
         if not df_empresa.empty:
-            # --- CÁLCULO E GRÁFICO DE CONFORMIDADE ---
             conf = len(df_empresa[df_empresa['diferenca'] == 0])
             div = len(df_empresa[df_empresa['diferenca'] != 0])
             
             col_chart, col_stats = st.columns([1, 2])
-            
             with col_chart:
                 fig = go.Figure(data=[go.Pie(
                     labels=['Conforme', 'Divergente'], 
                     values=[conf, div], 
                     hole=.6,
-                    marker_colors=['#28a745', '#dc3545'],
-                    textinfo='percent+label'
+                    marker_colors=['#28a745', '#dc3545']
                 )])
-                fig.update_layout(
-                    showlegend=False, 
-                    margin=dict(t=0, b=0, l=0, r=0), 
-                    height=200,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color='gray')
-                )
+                fig.update_layout(showlegend=False, height=200, margin=dict(t=0,b=0,l=0,r=0), paper_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
-            
             with col_stats:
-                st.write("### Resumo de Auditoria")
-                c1, c2 = st.columns(2)
-                c1.metric("Total Analisado", len(df_empresa))
-                c2.metric("Divergências", div, delta=f"{div} casos", delta_color="inverse")
+                st.metric("Total de Funcionários", len(df_empresa))
+                st.metric("Casos com Divergência", div, delta_color="inverse")
         
         st.divider()
         c_act1, c_act2, _ = st.columns([1, 1, 2])
@@ -193,6 +223,5 @@ elif menu == "⚙️ Admin Master":
         st.write("---")
         try:
             em = sb.table("empresas").select("nome_empresa, cnpj, representante, plano").execute()
-            if em.data: 
-                st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
+            if em.data: st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
         except: pass

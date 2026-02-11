@@ -1,4 +1,4 @@
-Import streamlit as st
+import streamlit as st
 import pandas as pd
 from supabase import create_client
 import hashlib
@@ -153,3 +153,4 @@ elif menu == "⚙️ Admin Master":
             em = sb.table("empresas").select("nome_empresa, cnpj, plano").execute()
             if em.data: st.dataframe(pd.DataFrame(em.data), use_container_width=True, hide_index=True)
         except: pass
+

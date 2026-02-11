@@ -5,38 +5,28 @@ import hashlib
 from datetime import datetime, timedelta
 
 # --- 1. CONFIGURAÇÃO E ESTILO ---
+# Definindo o tema claro diretamente na configuração da página
 st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
-# O segredo está nos seletores específicos [data-testid] que forçam a cor do texto
 st.markdown("""<style>
-    /* Fundo da página */
+    /* Forçando o fundo da aplicação para cinza claro/branco */
     .stApp { background-color: #f9f9f9; }
     
-    /* Card das métricas: Forçamos fundo branco e texto preto */
-    [data-testid="stMetric"] {
-        background-color: white !important;
-        padding: 20px !important;
-        border-radius: 12px !important;
-        border-top: 4px solid #002D62 !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important;
+    /* Estilo original dos cards de métrica */
+    .stMetric { 
+        background: white; 
+        padding: 20px; 
+        border-radius: 12px; 
+        border-top: 4px solid #002D62; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
     }
     
-    /* Força a cor do Rótulo (Label) para preto */
-    [data-testid="stMetricLabel"] p {
-        color: #1f1f1f !important;
-    }
-    
-    /* Força a cor do Valor (Value) para o azul da RRB */
-    [data-testid="stMetricValue"] div {
-        color: #002D62 !important;
-    }
-
     .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
     .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
     .admin-card { background: white; padding: 25px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 20px; }
     
-    /* Garante que o texto dentro do expander também seja legível */
-    .stExpander { background-color: white !important; color: #1f1f1f !important; }
+    /* Ajuste para garantir que textos fiquem escuros no padrão claro */
+    h1, h2, h3, p, span { color: #1f1f1f; }
 </style>""", unsafe_allow_html=True)
 
 def render_header(titulo):

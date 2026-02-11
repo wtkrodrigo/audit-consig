@@ -4,72 +4,92 @@ from supabase import create_client
 import hashlib
 from datetime import datetime, timedelta
 
-# --- 1. CONFIGURAÇÃO E ESTILO ---
-st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
+# --- 1. CONFIG E CONEXÃO ---
+st.set_page_config(page_title="RRB Auditoria", layout="wide")
 
-st.markdown("""
-<style>
-    .main { background-color: #f9f9f9; }
-    .stMetric { background: white; padding: 20px; border-radius: 12px; border-top: 4px solid #002D62; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-    .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
-    .logo-text { font-size: 26px; font-weight: bold; color: #002D62; }
-</style>
-""", unsafe_allow_html=True)
+try:
+    U, K = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
+    sb = create_client(U, K)
+except:
+    st.error("Erro nos Secrets."); st.stop()
 
-def render_header(titulo):
-    h_html = f"<div class='logo-container'><span style='font-size: 35px;'>🛡️</span>"
-    h_html += f"<div class='logo-text'>RRB SOLUÇÕES <span style='font-weight:normal; color:#666; font-size:16px;'>| {titulo}</span></div></div>"
-    st.markdown(h_html, unsafe_allow_html=True)
+def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
+def r_h(t):
+    st.markdown(f"### 🛡️ RRB SOLUÇÕES | {t}")
     st.write("---")
 
-# --- 2. CONEXÃO ---
-try:
-    s_u = st.secrets["SUPABASE_URL"]
-    s_k = st.secrets["SUPABASE_KEY"]
-    sb = create_client(s_u, s_k)
-except Exception:
-    st.error("Erro nos Secrets. Verifique as chaves no Streamlit.")
-    st.stop()
+# Tabelas
+TA, TE = "resultados_auditoria", "empresas"
 
-def h(p):
-    return hashlib.sha256(str.encode(p)).hexdigest()
-
-T_AUDIT = "resultados_auditoria"
-T_EMPRE = "empresas"
-
-# --- 3. NAVEGAÇÃO ---
-menu = st.sidebar.radio("Selecione o Portal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+# --- 2. NAVEGAÇÃO ---
+m = st.sidebar.radio("Menu", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin"])
 
 # --- MÓDULO FUNCIONÁRIO ---
-if menu == "👤 Funcionário":
-    render_header("Portal do Funcionário")
-    with st.container():
-        st.info("Valide seus dados abaixo para acessar.")
-        c1, c2 = st.columns(2)
-        cpf_in = c1.text_input("CPF (somente números)")
-        dt_nasc = c2.date_input("Data de Nascimento", min_value=datetime(1940, 1, 1), format="DD/MM/YYYY")
-        tel_fim = st.text_input("Últimos 4 dígitos do seu celular", max_chars=4)
-        c_clean = "".join(filter(str.isdigit, cpf_in))
-        
-    if st.button("CONSULTAR") and c_clean:
-        r = sb.table(T_AUDIT).select("*").eq("cpf", c_clean).execute()
+if m == "👤 Funcionário":
+    r_h("Portal do Funcionário")
+    c1, c2 = st.columns(2)
+    cpf = c1.text_input("CPF (apenas números)")
+    dt = c2.date_input("Nascimento", min_value=datetime(1940,1,1), format="DD/MM/YYYY")
+    tel = st.text_input("Últimos 4 dígitos do celular", max_chars=4)
+    cf = "".join(filter(str.isdigit, cpf))
+    
+    if st.button("CONSULTAR") and cf:
+        r = sb.table(TA).select("*").eq("cpf", cf).execute()
         if r.data:
             d = r.data[-1]
-            v_dt = str(dt_nasc) == str(d.get("data_nascimento", ""))
-            v_tl = str(d.get("telefone", "")).endswith(tel_fim)
-            
+            v_dt = str(dt) == str(d.get("data_nascimento",""))
+            v_tl = str(d.get("telefone","")).endswith(tel)
             if v_dt and v_tl:
-                st.success(f"Bem-vindo, {d['nome_funcionario']}")
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
-                m2.metric("Banco", d.get('banco_nome', 'N/A'))
-                
-                # Lógica de Status Separada para evitar SyntaxError
-                status_final = "✅ CONFORME"
-                if d.get('diferenca', 0) != 0:
-                    status_final = "⚠️ DIVERGÊNCIA"
-                m3.metric("Status", status_final)
-                
-                with st.expander("Ver Detalhes do Contrato"):
-                    st.write(f"**Contrato:** {d.get('contrato_id', 'N/A')}")
-                    p_p = int(d.get("parcelas_pagas", 0
+                st.success(f"Olá, {d['nome_funcionario']}")
+                cl1, cl2, cl3 = st.columns(3)
+                cl1.metric("Mensalidade", f"R$ {d.get('valor_rh',0):,.2f}")
+                cl2.metric("Banco", d.get('banco_nome','N/A'))
+                status = "✅ CONFORME" if d.get('diferenca',0)==0 else "⚠️ DIVERGÊNCIA"
+                cl3.metric("Status", status)
+                with st.expander("Detalhes"):
+                    pp, pt = int(d.get("parcelas_pagas",0)), int(d.get("parcelas_total",0))
+                    st.write(f"Contrato: {d.get('contrato_id','N/A')}")
+                    st.write(f"Parcelas: {pp}/{pt}")
+                    if pt > 0: st.progress(min(pp/pt, 1.0))
+            else: st.error("Dados incorretos.")
+        else: st.warning("CPF não encontrado.")
+
+# --- MÓDULO EMPRESA ---
+elif m == "🏢 Empresa":
+    r_h("Painel Empresa")
+    if "at" not in st.session_state: st.session_state.at = False
+    if not st.session_state.at:
+        u, p = st.text_input("Login"), st.text_input("Senha", type="password")
+        if st.button("ENTRAR"):
+            q = sb.table(TE).select("*").eq("login", u).execute()
+            if q.data and h(p) == q.data[0]["senha"]:
+                st.session_state.at, st.session_state.n = True, q.data[0]["nome_empresa"]
+                st.session_state.lk = q.data[0].get("link_planilha")
+                st.rerun()
+            else: st.error("Erro de login.")
+    else:
+        st.subheader(f"Empresa: {st.session_state.n}")
+        if st.button("🔄 SINCRONIZAR"):
+            try:
+                with st.spinner("Lendo..."):
+                    df = pd.read_csv(st.session_state.lk)
+                    df.columns = df.columns.str.strip().str.lower()
+                    for _, row in df.iterrows():
+                        vr, vb = float(row.get("valor_rh",0)), float(row.get("valor_banco",0))
+                        payload = {
+                            "nome_empresa": st.session_state.n,
+                            "cpf": "".join(filter(str.isdigit, str(row["cpf"]))),
+                            "nome_funcionario": str(row["nome"]),
+                            "valor_rh": vr, "valor_banco": vb,
+                            "diferenca": round(vr - vb, 2),
+                            "banco_nome": str(row.get("banco", "N/A")),
+                            "contrato_id": str(row.get("contrato", "N/A")),
+                            "parcelas_total": int(row.get("total_parcelas", 0)),
+                            "parcelas_pagas": int(row.get("parcelas_pagas", 0)),
+                            "data_nascimento": str(row.get("data_nascimento", "")),
+                            "telefone": "".join(filter(str.isdigit, str(row.get("telefone", "")))),
+                            "data_processamento": datetime.now().isoformat()
+                        }
+                        sb.table(TA).upsert(payload).execute()
+                    st.success("OK!")
+            except Exception as e:

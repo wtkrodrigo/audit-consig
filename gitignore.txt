@@ -1,0 +1,17 @@
+﻿# Ignorar configurações locais do Streamlit (onde ficam suas senhas)
+.streamlit/
+
+
+# Ignorar pastas temporárias do Python
+__pycache__/
+*.pyc
+
+
+# Ignorar ambientes virtuais (se você usar)
+venv/
+.venv/
+
+
+# Ignorar arquivos do sistema
+.DS_Store
+Thumbs.db

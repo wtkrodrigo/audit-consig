@@ -84,7 +84,16 @@ def portal_funcionario():
     with st.container():
         c1, c2, c3 = st.columns([2,2,1])
         cpf_in = c1.text_input("🔍 Digite seu CPF", placeholder="000.000.000-00")
-        nasc_in = c2.date_input("📅 Data de Nascimento", format="DD/MM/YYYY")
+        
+        # AJUSTE DE DATA: 1900 a 2100
+        nasc_in = c2.date_input(
+            "📅 Data de Nascimento", 
+            value=date(2000, 1, 1), 
+            min_value=date(1900, 1, 1), 
+            max_value=date(2100, 12, 31),
+            format="DD/MM/YYYY"
+        )
+        
         tel_in = c3.text_input("📱 Fim do Telefone", max_chars=4, placeholder="1234")
 
     if st.button("📊 ANALISAR MINHA SITUAÇÃO", use_container_width=True):

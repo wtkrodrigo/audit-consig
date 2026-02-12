@@ -1,208 +1,217 @@
 import streamlit as st
 import pandas as pd
+from supabase import create_client
 import hashlib
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 
-# 1. Configuração de Página (Primeira linha obrigatória)
-st.set_page_config(page_title="RRB Auditoria Platinum", layout="wide", page_icon="🛡️")
+# --- 1. CONFIGURAÇÃO E ESTILO (Efeitos Visuais Restaurados) ---
+st.set_page_config(page_title="RRB Soluções Auditoria", layout="wide")
 
-# 2. Importações e Conexão Segura
-try:
-    from supabase import create_client
-    from fpdf import FPDF
-except ImportError:
-    st.error("🚨 Erro: Verifique seu requirements.txt (fpdf e supabase são necessários).")
-    st.stop()
-
-def get_sb():
-    try:
-        if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
-            return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        return None
-    except: return None
-
-sb = get_sb()
-
-# --- Funções Utilitárias ---
-def sha256_hex(p: str): return hashlib.sha256(str(p).encode("utf-8")).hexdigest()
-def digits_only(s: str): return "".join(filter(str.isdigit, str(s or "")))
-
-def check_plan_status(exp_date):
-    if not exp_date: return False
-    try:
-        dt = datetime.strptime(str(exp_date)[:10], "%Y-%m-%d").date()
-        return dt >= date.today()
-    except: return False
-
-# --- Gerador de PDF Platinum ---
-def gerar_pdf_platinum(d):
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_fill_color(0, 45, 98); pdf.rect(0, 0, 210, 35, 'F')
-        pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", 'B', 16)
-        pdf.cell(190, 20, "RRB AUDITORIA - DEMONSTRATIVO OFICIAL", ln=True, align='C')
-        pdf.ln(20); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", 'B', 12)
-        pdf.cell(0, 10, f"NOME: {str(d.get('nome_funcionario', '')).upper()}", ln=True)
-        pdf.cell(0, 10, f"CPF: {d.get('cpf', '')}", ln=True)
-        pdf.ln(5)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.cell(95, 10, "VALOR DO EMPRESTIMO", 1, 0, 'L', True)
-        pdf.cell(95, 10, f"R$ {d.get('valor_total_emprestimo', 0):,.2f}", 1, 1)
-        pdf.cell(95, 10, "PARCELAS PAGAS", 1, 0, 'L', True)
-        pdf.cell(95, 10, f"{d.get('parcelas_pagas', 0)}", 1, 1)
-        pdf.cell(95, 10, "PARCELAS RESTANTES", 1, 0, 'L', True)
-        pdf.cell(95, 10, f"{d.get('parcelas_restantes', 0)}", 1, 1)
-        return pdf.output(dest='S').encode('latin-1', 'replace')
-    except Exception as e:
-        return f"Erro ao gerar PDF: {e}".encode()
-
-# --- CSS ENTERPRISE PLATINUM ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-    .stApp { background: #0e1117; }
-    .metric-card {
-        background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(74, 144, 226, 0.3);
-        border-radius: 15px; padding: 20px; text-align: center; transition: 0.3s;
+    [data-testid="stMetric"] {
+        background-color: rgba(28, 131, 225, 0.05);
+        padding: 15px 20px;
+        border-radius: 12px;
+        border-top: 4px solid #002D62;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .metric-card:hover { border-color: #4a90e2; background: rgba(74, 144, 226, 0.1); }
-    .wpp-fab {
-        position: fixed; bottom: 30px; right: 30px; background: #25D366; color: white !important;
-        width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; 
-        justify-content: center; font-size: 28px; z-index: 1000; text-decoration: none;
-    }
+    .logo-container { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+    .logo-text { font-size: 28px; font-weight: bold; color: #002D62; }
+    @media (prefers-color-scheme: dark) { .logo-text { color: #4A90E2; } }
 </style>
 """, unsafe_allow_html=True)
 
-# --- NAVEGAÇÃO ---
-menu = st.sidebar.radio("Navegação RRB Platinum", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+def render_header(titulo):
+    st.markdown(f"""
+    <div class='logo-container'>
+        <span style='font-size: 40px;'>🛡️</span>
+        <div class='logo-text'>RRB SOLUÇÕES <span style='font-weight:normal; color:var(--text-color); opacity: 0.6; font-size:18px;'>| {titulo}</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.write("---")
 
-# ==========================================
-# ABA FUNCIONÁRIO
-# ==========================================
-if menu == "👤 Funcionário":
-    st.markdown("# 🛡️ Portal do Colaborador")
-    st.write("Consulte detalhes do seu empréstimo e baixe o demonstrativo.")
-    
-    with st.container():
-        c1, c2, c3 = st.columns([2,2,1])
-        cpf_in = c1.text_input("🔍 CPF", placeholder="000.000.000-00")
-        nasc_in = c2.date_input("📅 Nascimento", value=date(2000,1,1), min_value=date(1900,1,1))
-        tel_in = c3.text_input("📱 Final Tel.", max_chars=4)
-
-    if st.button("📊 ANALISAR MINHA SITUAÇÃO", use_container_width=True):
-        if sb:
-            res = sb.table("resultados_auditoria").select("*").eq("cpf", digits_only(cpf_in)).execute()
-            if res.data:
-                d = res.data[0]
-                if str(d.get("data_nascimento")) == nasc_in.strftime("%Y-%m-%d"):
-                    st.balloons()
-                    st.success(f"Olá, {d.get('nome_funcionario')}! Seus dados foram localizados.")
-                    
-                    m1, m2, m3, m4 = st.columns(4)
-                    with m1: st.markdown(f"<div class='metric-card'>💰<br><small>Total Empréstimo</small><br><b>R$ {d.get('valor_total_emprestimo',0):,.2f}</b></div>", unsafe_allow_html=True)
-                    with m2: st.markdown(f"<div class='metric-card'>✅<br><small>Pagas</small><br><b>{d.get('parcelas_pagas',0)}</b></div>", unsafe_allow_html=True)
-                    with m3: st.markdown(f"<div class='metric-card'>⏳<br><small>Restantes</small><br><b>{d.get('parcelas_restantes',0)}</b></div>", unsafe_allow_html=True)
-                    with m4: st.markdown(f"<div class='metric-card'>⚖️<br><small>Diferença</small><br><b>R$ {d.get('diferenca',0):,.2f}</b></div>", unsafe_allow_html=True)
-                    
-                    st.markdown("---")
-                    pdf_bytes = gerar_pdf_platinum(d)
-                    st.download_button("📥 BAIXAR DEMONSTRATIVO DE SITUAÇÃO (PDF)", pdf_bytes, "Relatorio_Auditoria.pdf", "application/pdf", use_container_width=True)
-                else: st.error("Data de nascimento incorreta.")
-            else: st.warning("CPF não encontrado.")
-        else: st.error("Banco de dados offline.")
-
-# ==========================================
-# ABA EMPRESA
-# ==========================================
-elif menu == "🏢 Empresa":
-    st.markdown("# 🏢 Painel Corporativo")
-    if "emp_auth" not in st.session_state: st.session_state.emp_auth = None
-
-    if not st.session_state.emp_auth:
-        t_log, t_rec = st.tabs(["🔐 Login Platinum", "🔑 Esqueci a Senha"])
-        with t_log:
-            u_inp = st.text_input("Usuário (CNPJ)")
-            p_inp = st.text_input("Senha", type="password")
-            if st.button("ENTRAR NO PAINEL"):
-                q = sb.table("empresas").select("*").eq("login", u_inp).execute()
-                if q.data and sha256_hex(p_inp) == q.data[0]['senha']:
-                    if check_plan_status(q.data[0].get("data_expiracao")):
-                        st.session_state.emp_auth = q.data[0]
-                        st.rerun()
-                    else: st.error("❌ Plano Expirado. Contate o Admin.")
-                else: st.error("Credenciais inválidas.")
-        with t_rec:
-            st.info("Para recuperar o acesso, solicite o reset de senha ao administrador.")
+# --- 2. CONEXÃO SEGURA (Varredura de erro de inicialização) ---
+try:
+    if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+        sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
     else:
-        emp = st.session_state.emp_auth
-        st.sidebar.info(f"Empresa: {emp['nome_empresa']}")
-        if st.sidebar.button("Logoff"): 
-            st.session_state.emp_auth = None
-            st.rerun()
+        st.warning("⚠️ Configurações de banco de dados não detectadas. Verifique os Secrets.")
+        st.stop()
+except Exception as e:
+    st.error(f"❌ Falha crítica na conexão: {e}")
+    st.stop()
 
-        tab1, tab2, tab3, tab4 = st.tabs(["🔍 Pesquisa e Relatórios", "🎫 Chamados", "❓ FAQ", "⚙️ Perfil"])
+def h(p): return hashlib.sha256(str.encode(p)).hexdigest()
+
+def logout():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
+# --- 3. NAVEGAÇÃO ---
+menu = st.sidebar.radio("Selecione o Portal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+
+if menu == "🏢 Empresa" and st.session_state.get('at'):
+    st.sidebar.write("---")
+    if st.sidebar.button("🚪 Sair da Sessão"):
+        logout()
+
+# --- MÓDULO FUNCIONÁRIO (Restauração Total) ---
+if menu == "👤 Funcionário":
+    render_header("Portal do Funcionário")
+    with st.container():
+        st.info("🔐 Informe seus dados para liberar a consulta.")
+        c1, c2 = st.columns(2)
+        cpf_in = c1.text_input("CPF (somente números)")
+        dt_nasc_in = c2.date_input("Data de Nascimento", min_value=datetime(1930,1,1), format="DD/MM/YYYY")
+        tel_fim_in = st.text_input("Últimos 4 dígitos do seu telefone", max_chars=4)
+        c_clean = "".join(filter(str.isdigit, cpf_in))
+    
+    if st.button("🔓 ACESSAR AUDITORIA") and c_clean:
+        try:
+            r = sb.table("resultados_auditoria").select("*").eq("cpf", c_clean).execute()
+            if r.data:
+                d = r.data[-1]
+                if str(dt_nasc_in) == str(d.get("data_nascimento", "")) and str(d.get("telefone", "")).endswith(tel_fim_in):
+                    st.success(f"Bem-vindo, {d.get('nome_funcionario', 'Funcionário')}")
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Mensalidade RH", f"R$ {d.get('valor_rh', 0):,.2f}")
+                    m2.metric("Banco", d.get('banco_nome', 'N/A'))
+                    stt = "✅ CONFORME" if d.get('diferenca', 0) == 0 else "⚠️ DIVERGÊNCIA"
+                    m3.metric("Status", stt)
+                    with st.expander("📊 Detalhes do Contrato"):
+                        st.write(f"**Empréstimo:** R$ {d.get('valor_emprestimo', 0):,.2f} | **ID:** {d.get('contrato_id', 'N/A')}")
+                        pp, pt = int(d.get('parcelas_pagas', 0)), int(d.get('parcelas_total', 0))
+                        st.write(f"**Parcelas:** {pp} de {pt}")
+                        if pt > 0: st.progress(min(pp/pt, 1.0))
+                else: st.error("Dados de validação incorretos.")
+            else: st.warning("CPF não localizado.")
+        except: st.error("Erro ao consultar base de dados.")
+
+# --- MÓDULO EMPRESA (Filtros Novos + Senha Restaurada) ---
+elif menu == "🏢 Empresa":
+    render_header("Painel da Empresa")
+    if 'at' not in st.session_state: st.session_state.at = False
+    if 'reset_mode' not in st.session_state: st.session_state.reset_mode = False
+    
+    if not st.session_state.at:
+        if not st.session_state.reset_mode:
+            u = st.text_input("Usuário")
+            p = st.text_input("Senha", type='password')
+            if st.button("ACESSAR", use_container_width=True):
+                q = sb.table("empresas").select("*").eq("login", u).execute()
+                if q.data and h(p) == q.data[0]['senha']:
+                    st.session_state.at, st.session_state.n = True, q.data[0]['nome_empresa']
+                    st.session_state.lk = q.data[0].get('link_planilha')
+                    st.rerun()
+                else: st.error("Login ou senha inválidos.")
+            if st.button("Esqueci minha senha"):
+                st.session_state.reset_mode = True; st.rerun()
+        else:
+            st.subheader("🔑 Recuperar Senha")
+            user_reset = st.text_input("Confirme Usuário")
+            cnpj_reset = st.text_input("Confirme CNPJ")
+            nova_senha = st.text_input("Nova Senha", type="password")
+            if st.button("ATUALIZAR"):
+                check = sb.table("empresas").select("*").eq("login", user_reset).eq("cnpj", cnpj_reset).execute()
+                if check.data:
+                    sb.table("empresas").update({"senha": h(nova_senha)}).eq("login", user_reset).execute()
+                    st.success("Sucesso!"); st.session_state.reset_mode = False; st.rerun()
+    else:
+        st.subheader(f"Gestão: {st.session_state.n}")
+        res_db = sb.table("resultados_auditoria").select("*").eq("nome_empresa", st.session_state.n).execute()
+        df_empresa = pd.DataFrame(res_db.data) if res_db.data else pd.DataFrame()
+
+        if not df_empresa.empty:
+            c_m1, c_m2, c_m3 = st.columns(3)
+            c_m1.metric("Total Base", len(df_empresa))
+            c_m2.metric("Conformes", len(df_empresa[df_empresa['diferenca'] == 0]))
+            divs = len(df_empresa[df_empresa['diferenca'] != 0])
+            c_m3.metric("Divergentes", divs, delta=f"{divs} erros" if divs > 0 else None, delta_color="inverse")
         
-        with tab1:
-            st.markdown("### Pesquisar Colaborador")
-            res_aud = sb.table("resultados_auditoria").select("*").eq("nome_empresa", emp['nome_empresa']).execute()
-            df_aud = pd.DataFrame(res_aud.data)
-            if not df_aud.empty:
-                st.dataframe(df_aud, use_container_width=True)
-                st.download_button("📥 BAIXAR CSV", df_aud.to_csv(), "relatorio_geral.csv", use_container_width=True)
-        
-        with tab2:
-            st.markdown("### Suporte")
-            st.text_input("Assunto do Chamado")
-            st.text_area("Descrição")
-            st.button("ENVIAR")
+        st.divider()
+        c_act1, c_act2, c_act3 = st.columns([1, 1, 2])
+        with c_act1:
+            if st.button("🔄 SINCRONIZAR CSV", use_container_width=True):
+                try:
+                    with st.spinner("Sincronizando..."):
+                        df = pd.read_csv(st.session_state.lk)
+                        df.columns = df.columns.str.strip().str.lower()
+                        payloads = []
+                        for _, r in df.iterrows():
+                            vr = float(pd.to_numeric(r.get('valor_rh', 0), 'coerce') or 0)
+                            vb = float(pd.to_numeric(r.get('valor_banco', 0), 'coerce') or 0)
+                            payloads.append({
+                                "nome_empresa": st.session_state.n, 
+                                "cpf": "".join(filter(str.isdigit, str(r.get('cpf', "")))),
+                                "nome_funcionario": str(r.get('nome', 'N/A')), 
+                                "valor_rh": vr, "valor_banco": vb,
+                                "valor_emprestimo": float(pd.to_numeric(r.get('valor_emprestimo', 0), 'coerce') or 0),
+                                "diferenca": round(vr - vb, 2), "banco_nome": str(r.get('banco', 'N/A')),
+                                "contrato_id": str(r.get('contrato', 'N/A')),
+                                "parcelas_total": int(pd.to_numeric(r.get('total_parcelas', 0), 'coerce') or 0),
+                                "parcelas_pagas": int(pd.to_numeric(r.get('parcelas_pagas', 0), 'coerce') or 0),
+                                "data_nascimento": str(r.get('data_nascimento', '')),
+                                "telefone": "".join(filter(str.isdigit, str(r.get('telefone', "")))),
+                                "data_processamento": datetime.now().isoformat()
+                            })
+                        if payloads:
+                            sb.table("resultados_auditoria").upsert(payloads, on_conflict="cpf, contrato_id").execute()
+                            st.toast("Sucesso!"); st.rerun()
+                except Exception as e: st.error(f"Erro: {e}")
 
-        with tab3:
-            st.markdown("### FAQ")
-            with st.expander("Dúvidas sobre o plano?"): st.write("Contate o seu gerente de conta RRB.")
+        with c_act2:
+            if not df_empresa.empty:
+                st.download_button("📥 EXPORTAR", df_empresa.to_csv(index=False).encode('utf-8'), "auditoria.csv", use_container_width=True)
 
-        with tab4:
-            st.markdown("### Segurança")
-            new_user = st.text_input("Novo Usuário", value=emp['login'])
-            new_pass = st.text_input("Nova Senha", type="password")
-            if st.button("SALVAR ALTERAÇÕES"):
-                # LINHA CORRIGIDA ABAIXO:
-                sb.table("empresas").update({"login": new_user, "senha": sha256_hex(new_pass)}).eq("id", emp['id']).execute()
-                st.success("Dados atualizados! Por favor, faça login novamente.")
-                st.session_state.emp_auth = None
-                st.rerun()
+        busca = st.text_input("🔍 Pesquisar Nome ou CPF")
+        filtro = st.radio("Filtro de Status:", ["Todos", "✅ Conformes", "⚠️ Divergentes"], horizontal=True)
 
-# ==========================================
-# ABA ADMIN MASTER
-# ==========================================
+        if not df_empresa.empty:
+            df_f = df_empresa.copy()
+            if filtro == "✅ Conformes": df_f = df_f[df_f['diferenca'] == 0]
+            elif filtro == "⚠️ Divergentes": df_f = df_f[df_f['diferenca'] != 0]
+            if busca: df_f = df_f[df_f['nome_funcionario'].str.contains(busca, case=False, na=False) | df_f['cpf'].str.contains(busca, na=False)]
+            
+            st.dataframe(df_f, use_container_width=True, hide_index=True, column_config={
+                "valor_rh": st.column_config.NumberColumn("Valor RH", format="R$ %.2f"),
+                "valor_banco": st.column_config.NumberColumn("Valor Banco", format="R$ %.2f"),
+                "diferenca": st.column_config.NumberColumn("Diferença", format="R$ %.2f")
+            })
+
+# --- MÓDULO ADMIN MASTER (Restauração dos Campos de Cadastro) ---
 elif menu == "⚙️ Admin Master":
-    st.markdown("# ⚙️ Master Control")
-    master_pass = st.sidebar.text_input("Chave Mestre", type="password")
-    if master_pass == st.secrets.get("SENHA_MASTER"):
-        t1, t2 = st.tabs(["🏢 Gerir Empresas", "📋 Termos & Planos"])
-        with t1:
-            with st.form("new_emp"):
-                n_emp = st.text_input("Nome da Empresa")
-                c_emp = st.text_input("CNPJ (Login)")
-                r_emp = st.text_area("Representantes")
-                p_emp = st.selectbox("Plano", ["Platinum Enterprise", "Gold", "Standard"])
-                d_emp = st.number_input("Meses", value=12)
-                aceito_termo = st.checkbox("Autorizo o uso conforme LGPD")
-                if st.form_submit_button("CADASTRAR"):
-                    if aceito_termo:
-                        exp_date = (date.today() + timedelta(days=d_emp*30)).isoformat()
-                        sb.table("empresas").insert({
-                            "nome_empresa": n_emp, "login": c_emp, 
-                            "senha": sha256_hex("123456"), "plano": p_emp, 
-                            "data_expiracao": exp_date, "representantes": r_emp
-                        }).execute()
-                        st.success("Empresa cadastrada!")
-        with t2:
-            all_data = sb.table("empresas").select("*").execute()
-            if all_data.data:
-                st.dataframe(pd.DataFrame(all_data.data))
-    else: st.warning("Aguardando Chave Mestre.")
-
-st.markdown('<a href="https://wa.me/5513996261907" class="wpp-fab" target="_blank">💬</a>', unsafe_allow_html=True)
+    render_header("Configurações Master")
+    if st.sidebar.text_input("Chave Master", type='password') == st.secrets.get("SENHA_MASTER", "RRB123"):
+        with st.form("f_adm"):
+            st.subheader("📝 Cadastrar Nova Empresa Parceira")
+            c1, c2, c3 = st.columns([2, 1, 1])
+            razao, cnpj, plano = c1.text_input("Razão Social"), c2.text_input("CNPJ"), c3.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
+            
+            c4, c5, c6 = st.columns([1, 1, 2])
+            rep, tel, end = c4.text_input("Representante"), c5.text_input("Telefone"), c6.text_input("Endereço Completo")
+            
+            st.divider()
+            c7, c8, c9 = st.columns(3)
+            lo, se, lk = c7.text_input("Login Administrativo"), c8.text_input("Senha", type='password'), c9.text_input("URL Planilha (CSV)")
+            
+            if st.form_submit_button("✅ SALVAR EMPRESA"):
+                if razao and lo and se:
+                    dt = {
+                        "nome_empresa": razao, "cnpj": cnpj, "representante": rep, "telefone": tel, "endereco": end, 
+                        "plano": plano, "login": lo, "senha": h(se), "link_planilha": lk,
+                        "data_expiracao": (datetime.now() + timedelta(days=365)).isoformat()
+                    }
+                    try:
+                        sb.table("empresas").insert(dt).execute()
+                        st.success("Empresa cadastrada com sucesso!"); st.rerun()
+                    except Exception as e: st.error(f"Erro ao salvar: {e}")
+        
+        st.write("---")
+        st.subheader("🏢 Empresas Ativas")
+        try:
+            em = sb.table("empresas").select("*").execute()
+            if em.data:
+                st.dataframe(pd.DataFrame(em.data)[["nome_empresa", "cnpj", "representante", "plano"]], use_container_width=True, hide_index=True)
+        except: pass

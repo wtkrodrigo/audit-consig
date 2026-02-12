@@ -1,6 +1,4 @@
 streamlit
 pandas
-streamlit-authenticator
 supabase
-plotly
 fpdf

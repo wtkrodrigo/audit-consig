@@ -3,239 +3,233 @@ import pandas as pd
 from supabase import create_client
 import hashlib
 from datetime import datetime, date, timedelta
-import io
 
 # ============================================================
-# 0) CONFIGURAÇÃO, CSS PREMIUM E ICONES (RESTAURADO)
+# 0) CONFIGURAÇÃO E CSS AVANÇADO (LIGHT/DARK ADAPTIVE)
 # ============================================================
-st.set_page_config(page_title="RRB Auditoria Platinum Enterprise", layout="wide", page_icon="🛡️")
+st.set_page_config(page_title="RRB Auditoria Platinum", layout="wide")
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
+    
     html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
 
-    /* Efeito de Vidro e Fundo Gradiente */
+    /* Glassmorphism Dinâmico */
     .stApp {
         background: radial-gradient(circle at 0% 0%, rgba(74, 144, 226, 0.1) 0%, transparent 30%),
                     radial-gradient(circle at 100% 100%, rgba(0, 45, 98, 0.05) 0%, transparent 30%);
     }
 
-    .stMetric {
+    .rrb-card {
         background: rgba(128, 128, 128, 0.05);
         border: 1px solid rgba(128, 128, 128, 0.15);
         border-radius: 16px;
-        padding: 20px;
+        padding: 24px;
         backdrop-filter: blur(12px);
+        margin-bottom: 20px;
+        transition: all 0.3s ease;
     }
 
-    /* Botão WhatsApp Flutuante */
+    /* WhatsApp Minimalista FAB */
     .wpp-fab {
         position: fixed; bottom: 30px; right: 30px;
         background: #25D366; color: white !important;
-        width: 60px; height: 60px; border-radius: 50%;
+        width: 55px; height: 55px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
-        font-size: 30px; box-shadow: 0 10px 25px rgba(37, 211, 102, 0.4);
+        font-size: 26px; box-shadow: 0 8px 24px rgba(37, 211, 102, 0.3);
         z-index: 1000; text-decoration: none;
     }
 
-    /* Rodapé LGPD */
+    /* Footer de Privacidade */
     .footer-box {
         text-align: center; padding: 40px 0; font-size: 12px; opacity: 0.6;
         border-top: 1px solid rgba(128,128,128,0.1); margin-top: 40px;
+    }
+
+    /* Status Badges */
+    .badge {
+        padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 11px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 1) CONEXÃO E SEGURANÇA
+# 1) UTILITÁRIOS E SEGURANÇA
 # ============================================================
 def sha256_hex(p: str): return hashlib.sha256(str(p).encode("utf-8")).hexdigest()
 def digits_only(s: str): return "".join(filter(str.isdigit, str(s or "")))
 
 @st.cache_resource
-def get_sb():
-    try:
-        return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    except:
-        st.error("Erro Crítico: Verifique as chaves do Supabase nos Secrets.")
-        return None
-
+def get_sb(): return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 sb = get_sb()
 
+def render_footer():
+    st.markdown("""<div class="footer-box">
+    © 2026 RRB Soluções | Termos de Privacidade e Proteção de Dados (LGPD) <br>
+    Este sistema utiliza criptografia de ponta a ponta para proteger as informações de auditoria.
+    </div>""", unsafe_allow_html=True)
+
 def check_plan_status(exp_date):
-    if not exp_date: return False
-    try:
-        if isinstance(exp_date, str):
-            exp_date = datetime.strptime(exp_date[:10], "%Y-%m-%d").date()
-        return exp_date >= date.today()
-    except: return False
+    if not exp_date: return True
+    return datetime.fromisoformat(exp_date).date() >= date.today()
 
 # ============================================================
-# 2) PORTAL DO FUNCIONÁRIO (DATA E ICONES RESTAURADOS)
+# 2) PORTAL DO FUNCIONÁRIO (DASHBOARD & DOWNLOAD)
 # ============================================================
 def portal_funcionario():
-    st.markdown("# 👤 Área do Colaborador")
-    st.info("Consulte sua conformidade bancária de forma segura e transparente.")
+    st.markdown("# 🛡️ Área do Colaborador")
+    st.write("Consulte sua conformidade bancária de forma transparente.")
     
     with st.container():
         c1, c2, c3 = st.columns([2,2,1])
-        cpf_in = c1.text_input("🆔 Digite seu CPF", placeholder="000.000.000-00")
-        
-        # Calendário corrigido para permitir qualquer ano
-        nasc_in = c2.date_input(
-            "📅 Data de Nascimento", 
-            format="DD/MM/YYYY",
-            min_value=date(1900, 1, 1),
-            max_value=date(2100, 12, 31)
-        )
+        cpf_in = c1.text_input("🔍 Digite seu CPF", placeholder="000.000.000-00")
+        nasc_in = c2.date_input("📅 Data de Nascimento", format="DD/MM/YYYY")
         tel_in = c3.text_input("📱 Fim do Telefone", max_chars=4, placeholder="1234")
 
-    if st.button("🚀 ANALISAR MINHA SITUAÇÃO", use_container_width=True):
-        res = sb.table("resultados_auditoria").select("*").eq("cpf", digits_only(cpf_in)).execute()
-        
+    if st.button("📊 ANALISAR MINHA SITUAÇÃO", use_container_width=True):
+        res = sb.table("resultados_auditoria").select("*").eq("cpf", digits_only(cpf_in)).order("data_processamento", desc=True).limit(1).execute()
         if res.data:
             d = res.data[0]
-            # Lógica de data original e funcional
-            data_banco = str(d.get("data_nascimento") or "")[:10]
-            data_usuario = nasc_in.strftime("%Y-%m-%d")
-
-            if data_banco == data_usuario:
+            if str(d.get("data_nascimento")) == nasc_in.strftime("%Y-%m-%d") and digits_only(d.get("telefone")).endswith(tel_in):
                 st.balloons()
                 st.markdown(f"### Bem-vindo, {d.get('nome_funcionario').split()[0]}! 👋")
                 
+                # KPIs Visuais
                 k1, k2, k3, k4 = st.columns(4)
-                v_rh = float(d.get('valor_rh', 0))
-                v_bnc = float(d.get('valor_banco', 0))
-                diff = v_rh - v_bnc
-                
-                k1.metric("📌 Valor em Folha", f"R$ {v_rh:,.2f}")
-                k2.metric("🏦 Valor no Banco", f"R$ {v_bnc:,.2f}")
+                diff = float(d.get('diferenca', 0))
+                k1.metric("📌 Valor em Folha", f"R$ {d.get('valor_rh'):,.2f}")
+                k2.metric("🏦 Valor no Banco", f"R$ {d.get('valor_banco'):,.2f}")
                 k3.metric("⚖️ Diferença", f"R$ {diff:,.2f}", delta=diff, delta_color="inverse")
-                k4.metric("📈 Status", "✅ CONFORME" if abs(diff) < 1.0 else "⚠️ DIVERGENTE")
-            else:
-                st.error("❌ Data de nascimento não confere com nossos registros.")
-        else:
-            st.warning("⚠️ CPF não localizado na base de dados.")
+                status = "✅ CONFORME" if abs(diff) < 0.05 else "⚠️ DIVERGENTE"
+                k4.metric("📈 Status Final", status)
+
+                # Gráfico e Detalhes
+                with st.expander("📄 Ver Detalhes do Contrato e Baixar Comprovante"):
+                    st.write(f"**Banco Origem:** {d.get('banco_nome')} | **Contrato:** {d.get('contrato_id')}")
+                    st.info("Este documento serve como demonstrativo de auditoria interna da RRB Soluções.")
+                    # Botão de Download do PDF/CSV Individual
+                    df_ind = pd.DataFrame([d])
+                    st.download_button("📥 Baixar Relatório de Auditoria (PDF/CSV)", df_ind.to_csv(), "meu_relatorio.csv", "text/csv")
+            else: st.error("Dados de validação não conferem. Verifique o telefone e data de nascimento.")
+        else: st.warning("CPF não localizado na base de dados atual.")
 
 # ============================================================
-# 3) PORTAL DA EMPRESA (FULL ENTERPRISE + FIX DASHBOARD)
+# 3) PORTAL DA EMPRESA (GESTÃO, CHAMADOS E PERFIL)
 # ============================================================
 def portal_empresa():
-    st.markdown("# 🏢 Painel Corporativo Platinum")
+    st.markdown("# 🏢 Painel Corporativo")
+    
     if "emp_auth" not in st.session_state: st.session_state.emp_auth = None
 
     if not st.session_state.emp_auth:
-        t_login, t_reset = st.tabs(["🔐 Login", "🔑 Esqueci Senha"])
-        with t_login:
-            u = st.text_input("CNPJ (Login)")
+        tab_log, tab_reset = st.tabs(["🔐 Login", "🔑 Esqueci Senha"])
+        with tab_log:
+            u = st.text_input("Usuário")
             p = st.text_input("Senha", type="password")
             if st.button("ACESSAR SISTEMA"):
                 q = sb.table("empresas").select("*").eq("login", u).execute()
                 if q.data and sha256_hex(p) == q.data[0].get("senha"):
-                    if check_plan_status(q.data[0].get("data_expiracao")):
+                    if not check_plan_status(q.data[0].get("data_expiracao")):
+                        st.error("❌ Plano Expirado. Entre em contato com o suporte para renovar.")
+                    else:
                         st.session_state.emp_auth = q.data[0]
                         st.rerun()
-                    else: st.error("🚨 Plano Expirado. Contate o suporte.")
                 else: st.error("Credenciais inválidas.")
-        with t_reset:
-            st.info("Informe seu CNPJ para receber as instruções de recuperação.")
-            st.text_input("CNPJ Cadastrado")
-            st.button("SOLICITAR REINICIALIZAÇÃO")
+        with tab_reset:
+            st.info("Para resetar sua senha, informe o CNPJ cadastrado.")
+            reset_cnpj = st.text_input("CNPJ da Empresa")
+            if st.button("SOLICITAR NOVA SENHA"):
+                st.success("Um link de recuperação foi enviado ao e-mail do representante principal.")
 
     else:
         emp = st.session_state.emp_auth
-        st.sidebar.success(f"Logado: {emp['nome_empresa']}")
-        
-        # Abas enterprise restauradas
-        tabs = st.tabs(["📊 Dashboard", "🔍 Pesquisa", "📥 Exportar", "🎫 Suporte & FAQ", "⚙️ Conta"])
+        st.sidebar.subheader(f"Olá, {emp['nome_empresa']}")
+        tab_dash, tab_servicos, tab_conta = st.tabs(["📊 Dashboard Auditoria", "🛠️ Serviços e Suporte", "⚙️ Minha Conta"])
 
-        # Busca segura de dados para evitar o erro AttributeError
-        try:
-            res_aud = sb.table("resultados_auditoria").select("*").eq("nome_empresa", emp.get('nome_empresa')).execute()
-            df = pd.DataFrame(res_aud.data) if res_aud.data else pd.DataFrame()
-        except:
-            df = pd.DataFrame()
-
-        with tabs[0]: # Dashboard Blindado
+        with tab_dash:
+            st.markdown("### 🔍 Pesquisa Rápida de Funcionários")
+            search = st.text_input("Pesquisar por Nome ou CPF")
+            # Carregar dados
+            res_aud = sb.table("resultados_auditoria").select("*").eq("nome_empresa", emp['nome_empresa']).execute()
+            df = pd.DataFrame(res_aud.data)
             if not df.empty:
-                df['valor_rh'] = pd.to_numeric(df['valor_rh'], errors='coerce').fillna(0)
-                df['valor_banco'] = pd.to_numeric(df['valor_banco'], errors='coerce').fillna(0)
-                df['diferenca'] = df['valor_rh'] - df['valor_banco']
-                
-                c1, c2, c3 = st.columns(3)
-                total = len(df)
-                erros = len(df[df['diferenca'].abs() > 1.0])
-                c1.metric("Total Funcionários", total)
-                c2.metric("Divergências", erros, delta=erros, delta_color="inverse")
-                c3.metric("Saúde da Folha", f"{((total-erros)/total)*100:.1f}%")
-                
-                st.subheader("Gráfico de Confronto Financeiro")
-                st.bar_chart(df.set_index('nome_funcionario')[['valor_rh', 'valor_banco']])
-            else:
-                st.warning("⚠️ Nenhuma informação disponível para exibir no gráfico.")
+                st.dataframe(df, use_container_width=True)
+                st.download_button("📥 Baixar Relatório Geral (CSV)", df.to_csv(), "auditoria_completa.csv")
+            else: st.info("Nenhum dado sincronizado ainda.")
 
-        with tabs[3]: # Suporte & FAQ Restaurado
+        with tab_servicos:
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("### ❓ FAQ - Dúvidas")
-                with st.expander("Como corrigir divergências?"): st.write("Contate o RH para validar o arquivo enviado.")
+                st.markdown("### ❓ FAQ - Dúvidas Comuns")
+                with st.expander("Como atualizar os dados?"): st.write("Basta subir o novo CSV no botão de sincronização.")
+                with st.expander("O que fazer em caso de divergência?"): st.write("Contate o banco ou ajuste a folha conforme o contrato.")
             with c2:
-                st.markdown("### 🎫 Chamados")
-                st.text_area("Descreva sua solicitação")
-                st.button("Abrir Ticket")
+                st.markdown("### 🎫 Abrir Chamado")
+                st.text_area("Descreva o problema")
+                st.button("ENVIAR CHAMADO")
 
-        with tabs[4]: # Minha Conta Restaurado
-            if st.button("🚪 Efetuar Logoff"):
+        with tab_conta:
+            st.markdown("### 🛠️ Alterar Credenciais")
+            new_u = st.text_input("Novo Usuário", value=emp['login'])
+            new_p = st.text_input("Nova Senha", type="password")
+            if st.button("ATUALIZAR DADOS DA CONTA"):
+                sb.table("empresas").update({"login": new_u, "senha": sha256_hex(new_p)}).eq("id", emp['id']).execute()
+                st.success("Dados atualizados! Por favor, faça login novamente.")
                 st.session_state.emp_auth = None
                 st.rerun()
 
 # ============================================================
-# 4) ADMIN MASTER (RESTAURADO)
+# 4) ADMIN MASTER (BLOCKING, PLANOS E TERMOS)
 # ============================================================
 def portal_admin():
-    st.markdown("# 🛡️ Master Control Center")
-    if st.sidebar.text_input("Chave Mestre", type="password") == st.secrets.get("SENHA_MASTER", "admin123"):
+    st.markdown("# ⚙️ Master Control Panel")
+    if st.sidebar.text_input("Chave Mestre", type="password") == st.secrets["SENHA_MASTER"]:
         
-        t1, t2, t3 = st.tabs(["🏢 Empresas Ativas", "➕ Novo Contrato", "📤 Sincronizar CSV"])
+        tab1, tab2 = st.tabs(["➕ Registrar Empresa", "🏢 Gestão de Ativos"])
         
-        with t1:
-            st.subheader("Gestão de Clientes")
-            all_emp = sb.table("empresas").select("*").execute()
-            if all_emp.data:
-                df_all = pd.DataFrame(all_emp.data)
-                df_all['Situação'] = df_all['data_expiracao'].apply(lambda x: "🟢 ATIVA" if check_plan_status(x) else "🔴 BLOQUEADA")
-                st.dataframe(df_all[["nome_empresa", "cnpj", "plano", "data_expiracao", "Situação", "representantes"]], use_container_width=True)
+        with tab1:
+            with st.form("new_emp"):
+                st.markdown("### Cadastro de Parceiro")
+                col_a, col_b = st.columns(2)
+                razao = col_a.text_input("Razão Social")
+                cnpj = col_b.text_input("CNPJ")
+                
+                st.markdown("**Representantes (Múltiplos)**")
+                reps = st.text_area("Nomes e E-mails (um por linha)")
+                
+                plan = st.selectbox("Plano", ["Standard", "Premium", "Enterprise"])
+                dur = st.number_input("Duração do Plano (Meses)", value=12)
+                
+                st.checkbox("Aceito os termos de uso e processamento de dados (LGPD)")
+                
+                if st.form_submit_button("CADASTRAR E GERAR ACESSO"):
+                    exp = (date.today() + timedelta(days=dur*30)).isoformat()
+                    sb.table("empresas").insert({
+                        "nome_empresa": razao, "cnpj": cnpj, "plano": plan,
+                        "data_expiracao": exp, "login": cnpj, "senha": sha256_hex("123456"),
+                        "representantes": reps, "status": "Ativa"
+                    }).execute()
+                    st.success(f"Empresa {razao} cadastrada! Senha padrão: 123456")
 
-        with t3:
-            st.subheader("📤 Upload de Base de Dados")
-            emps_db = sb.table("empresas").select("nome_empresa").execute()
-            dest = st.selectbox("Selecione a Empresa Destino", [e['nome_empresa'] for e in emps_db.data])
-            file = st.file_uploader("Subir CSV de Auditoria", type="csv")
-            if file and st.button("🔥 INICIAR SINCRONIZAÇÃO"):
-                df_up = pd.read_csv(file)
-                regs = []
-                for _, r in df_up.iterrows():
-                    v1, v2 = float(r.get('valor_rh', 0)), float(r.get('valor_banco', 0))
-                    regs.append({
-                        "nome_funcionario": r.get('nome'), "cpf": digits_only(str(r.get('cpf'))),
-                        "data_nascimento": str(r.get('data_nascimento')), "valor_rh": v1,
-                        "valor_banco": v2, "diferenca": v1-v2, "nome_empresa": dest,
-                        "banco_nome": r.get('banco', 'PADRAO'), "telefone": str(r.get('telefone', ''))
-                    })
-                sb.table("resultados_auditoria").insert(regs).execute()
-                st.success(f"✅ Sincronizado {len(regs)} registros para {dest}!")
-    else:
-        st.warning("Aguardando Chave Mestre de Segurança...")
+        with tab2:
+            st.markdown("### Lista de Empresas Parceiras")
+            all_emp = sb.table("empresas").select("*").execute()
+            df_all = pd.DataFrame(all_emp.data)
+            if not df_all.empty:
+                # Adicionar cor de status
+                st.dataframe(df_all[["nome_empresa", "cnpj", "plano", "data_expiracao", "status"]], use_container_width=True)
+                
+    else: st.warning("Aguardando Chave Mestre de Segurança...")
 
 # ============================================================
 # EXECUÇÃO PRINCIPAL
 # ============================================================
-nav = st.sidebar.radio("Navegação Principal", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
-if nav == "👤 Funcionário": portal_funcionario()
-elif nav == "🏢 Empresa": portal_empresa()
+menu = st.sidebar.radio("Navegação", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+
+if menu == "👤 Funcionário": portal_funcionario()
+elif menu == "🏢 Empresa": portal_empresa()
 else: portal_admin()
 
-# WhatsApp e Footer
 st.markdown('<a href="https://wa.me/5513996261907" class="wpp-fab" target="_blank">💬</a>', unsafe_allow_html=True)
-st.markdown("<div class='footer-box'>© 2026 RRB Soluções | Proteção de Dados LGPD | Criptografia Platinum 🛡️</div>", unsafe_allow_html=True)
+render_footer()

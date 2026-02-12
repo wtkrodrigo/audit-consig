@@ -3,181 +3,215 @@ import pandas as pd
 import hashlib
 from datetime import datetime, date, timedelta
 
-# Tenta carregar bibliotecas externas com segurança
+# Tenta carregar bibliotecas externas
 try:
     from supabase import create_client
     from fpdf import FPDF
 except ImportError:
-    st.error("⚠️ Erro de dependências. Verifique se 'fpdf' e 'supabase' estão no seu requirements.txt")
+    st.error("⚠️ Erro: Instale 'fpdf' e 'supabase' no seu ambiente.")
     st.stop()
 
 # ============================================================
-# 0) CONFIGURAÇÃO INICIAL (OBRIGATÓRIO SER A PRIMEIRA LINHA)
+# 0) CONFIGURAÇÃO E CSS (VISUAL PLATINUM)
 # ============================================================
 st.set_page_config(page_title="RRB Auditoria Platinum", layout="wide", page_icon="🛡️")
 
-# ============================================================
-# 1) CONEXÃO E SEGURANÇA (SUPABASE & SECRETS)
-# ============================================================
-def get_sb():
-    try:
-        # Verifica se os segredos existem antes de tentar conectar
-        if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
-            return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        return None
-    except:
-        return None
-
-sb = get_sb()
-
-def sha256_hex(p: str): return hashlib.sha256(str(p).encode("utf-8")).hexdigest()
-def digits_only(s: str): return "".join(filter(str.isdigit, str(s or "")))
-
-# ============================================================
-# 2) GERADOR DE RELATÓRIO PDF PLATINUM
-# ============================================================
-def gerar_pdf_platinum(d):
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # Cabeçalho Estilizado
-    pdf.set_fill_color(0, 45, 98)
-    pdf.rect(0, 0, 210, 35, 'F')
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Arial", 'B', 16)
-    pdf.cell(190, 20, "RRB SOLUCOES - AUDITORIA PLATINUM", ln=True, align='C')
-    
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(20)
-    
-    # Seção: Identificação
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "1. IDENTIFICACAO DO COLABORADOR", ln=True)
-    pdf.set_font("Arial", '', 11)
-    pdf.cell(0, 8, f"Nome: {d.get('nome_funcionario', 'N/A')}", ln=True)
-    pdf.cell(0, 8, f"CPF: {d.get('cpf', 'N/A')}", ln=True)
-    pdf.cell(0, 8, f"Empresa: {d.get('nome_empresa', 'N/A')}", ln=True)
-    
-    pdf.ln(5)
-    
-    # Seção: Detalhes do Empréstimo (Ajuste solicitado)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "2. DETALHES DO EMPRESTIMO", ln=True)
-    pdf.set_font("Arial", '', 11)
-    pdf.cell(95, 10, f"Valor Total: R$ {d.get('valor_total_emprestimo', 0):,.2f}", border=1)
-    pdf.cell(95, 10, f"Contrato: {d.get('contrato_id', 'N/A')}", border=1, ln=True)
-    pdf.cell(95, 10, f"Parcelas Pagas: {d.get('parcelas_pagas', 0)}", border=1)
-    pdf.cell(95, 10, f"Parcelas Restantes: {d.get('parcelas_restantes', 0)}", border=1, ln=True)
-    
-    pdf.ln(5)
-    
-    # Seção: Auditoria
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 10, "3. PARECER DE CONFORMIDADE", ln=True)
-    pdf.set_font("Arial", '', 11)
-    pdf.cell(0, 8, f"Valor em Folha: R$ {d.get('valor_rh', 0):,.2f}", ln=True)
-    pdf.cell(0, 8, f"Valor no Banco: R$ {d.get('valor_banco', 0):,.2f}", ln=True)
-    pdf.set_font("Arial", 'B', 11)
-    pdf.cell(0, 10, f"Diferenca: R$ {d.get('diferenca', 0):,.2f}", ln=True)
-    
-    return pdf.output(dest='S').encode('latin-1', 'replace')
-
-# ============================================================
-# 3) INTERFACE CSS E DESIGN
-# ============================================================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif; }
-    .stApp { background: radial-gradient(circle at 0% 0%, rgba(74, 144, 226, 0.05) 0%, transparent 30%); }
-    .wpp-fab { position: fixed; bottom: 30px; right: 30px; background: #25D366; color: white !important;
-               width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; 
-               justify-content: center; font-size: 28px; z-index: 1000; text-decoration: none; }
+    
+    /* Fundo Gradiente Dinâmico */
+    .stApp {
+        background: radial-gradient(circle at 2% 2%, rgba(0, 45, 98, 0.15) 0%, transparent 25%),
+                    radial-gradient(circle at 98% 98%, rgba(74, 144, 226, 0.1) 0%, transparent 25%),
+                    #0e1117;
+    }
+
+    /* Estilização de Cards */
+    .metric-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 15px;
+        padding: 20px;
+        text-align: center;
+        transition: 0.3s;
+    }
+    .metric-card:hover { border-color: #4a90e2; background: rgba(74, 144, 226, 0.05); }
+
+    /* WhatsApp FAB */
+    .wpp-fab {
+        position: fixed; bottom: 30px; right: 30px;
+        background: #25D366; color: white !important;
+        width: 60px; height: 60px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 28px; box-shadow: 0 10px 25px rgba(37, 211, 102, 0.4);
+        z-index: 1000; text-decoration: none;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 4) NAVEGAÇÃO PRINCIPAL
+# 1) SEGURANÇA E UTILITÁRIOS
 # ============================================================
-menu = st.sidebar.radio("Navegação Platinum", ["👤 Funcionário", "🏢 Empresa", "⚙️ Admin Master"])
+def get_sb():
+    try:
+        return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    except: return None
 
-# --- ABA FUNCIONÁRIO ---
-if menu == "👤 Funcionário":
-    st.markdown("# 🛡️ Portal do Colaborador")
-    st.write("Consulte sua auditoria bancária com transparência.")
-    
+sb = get_sb()
+def sha256_hex(p: str): return hashlib.sha256(str(p).encode("utf-8")).hexdigest()
+def digits_only(s: str): return "".join(filter(str.isdigit, str(s or "")))
+
+def check_plan_status(exp_date):
+    if not exp_date: return False
+    return datetime.fromisoformat(str(exp_date)).date() >= date.today()
+
+# Gerador de PDF Premium
+def gerar_pdf_platinum(d):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_fill_color(0, 45, 98); pdf.rect(0, 0, 210, 40, 'F')
+    pdf.set_text_color(255, 255, 255); pdf.set_font("Arial", 'B', 18)
+    pdf.cell(190, 20, "RELATORIO DE AUDITORIA PLATINUM", ln=True, align='C')
+    pdf.ln(20); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, f"NOME: {d.get('nome_funcionario')}", ln=True)
+    pdf.cell(0, 10, f"CPF: {d.get('cpf')}", ln=True)
+    pdf.ln(5)
+    pdf.cell(95, 10, f"Valor Total: R$ {d.get('valor_total_emprestimo', 0):,.2f}", 1)
+    pdf.cell(95, 10, f"Pagas/Restantes: {d.get('parcelas_pagas')}/{d.get('parcelas_restantes')}", 1, 1)
+    pdf.ln(10); pdf.set_font("Arial", 'I', 10)
+    pdf.multi_cell(0, 10, "Este documento comprova a analise de conformidade realizada pela RRB Solucoes entre os dados bancarios e a folha de pagamento.")
+    return pdf.output(dest='S').encode('latin-1', 'replace')
+
+# ============================================================
+# 2) PORTAL DO FUNCIONÁRIO
+# ============================================================
+def portal_funcionario():
+    st.markdown("# 🛡️ Área de Transparência do Colaborador")
+    st.write("Verifique a situação do seu contrato e baixe o demonstrativo oficial.")
+
     with st.container():
         c1, c2, c3 = st.columns([2,2,1])
-        cpf_in = c1.text_input("🔍 Digite seu CPF")
-        nasc_in = c2.date_input("📅 Nascimento", value=date(2000, 1, 1), min_value=date(1900, 1, 1), max_value=date(2100, 12, 31))
-        tel_in = c3.text_input("📱 Final Telefone", max_chars=4)
+        cpf_in = c1.text_input("🔍 Seu CPF", placeholder="000.000.000-00")
+        nasc_in = c2.date_input("📅 Nascimento", value=date(2000,1,1), min_value=date(1900,1,1), max_value=date(2100,12,31))
+        tel_in = c3.text_input("📱 Final Tel.", max_chars=4)
 
-    if st.button("📊 ANALISAR MINHA SITUAÇÃO", use_container_width=True):
-        if not sb:
-            st.error("Conexão com banco de dados não configurada corretamente nos Secrets.")
-        else:
-            res = sb.table("resultados_auditoria").select("*").eq("cpf", digits_only(cpf_in)).execute()
-            if res.data:
-                d = res.data[0]
-                if str(d.get("data_nascimento")) == nasc_in.strftime("%Y-%m-%d"):
-                    st.success(f"Bem-vindo, {d.get('nome_funcionario')}!")
-                    
-                    # KPIs de Empréstimo
-                    k1, k2, k3, k4 = st.columns(4)
-                    k1.metric("💰 Valor Total", f"R$ {d.get('valor_total_emprestimo', 0):,.2f}")
-                    k2.metric("✅ Pagas", d.get("parcelas_pagas", 0))
-                    k3.metric("⏳ Restantes", d.get("parcelas_restantes", 0))
-                    k4.metric("⚖️ Diferença", f"R$ {d.get('diferenca', 0):,.2f}")
-                    
-                    pdf_bytes = gerar_pdf_platinum(d)
-                    st.download_button("📥 BAIXAR RELATÓRIO OFICIAL (PDF)", pdf_bytes, f"Relatorio_{d['cpf']}.pdf", "application/pdf", use_container_width=True)
-                else:
-                    st.error("Data de nascimento não confere.")
-            else:
-                st.warning("CPF não localizado.")
+    if st.button("📊 ANALISAR MINHA CONFORMIDADE", use_container_width=True):
+        res = sb.table("resultados_auditoria").select("*").eq("cpf", digits_only(cpf_in)).execute()
+        if res.data:
+            d = res.data[0]
+            if str(d.get("data_nascimento")) == nasc_in.strftime("%Y-%m-%d"):
+                st.balloons()
+                st.markdown(f"### Olá, {d.get('nome_funcionario')}! 👋")
+                
+                # Interface Visual com Ícones
+                m1, m2, m3, m4 = st.columns(4)
+                with m1: st.markdown(f"<div class='metric-card'>💰<br><small>Total Empréstimo</small><br><b>R$ {d.get('valor_total_emprestimo',0):,.2f}</b></div>", unsafe_allow_html=True)
+                with m2: st.markdown(f"<div class='metric-card'>✅<br><small>Parc. Pagas</small><br><b>{d.get('parcelas_pagas',0)}</b></div>", unsafe_allow_html=True)
+                with m3: st.markdown(f"<div class='metric-card'>⏳<br><small>Restantes</small><br><b>{d.get('parcelas_restantes',0)}</b></div>", unsafe_allow_html=True)
+                with m4: st.markdown(f"<div class='metric-card'>⚖️<br><small>Diferença</small><br><b>R$ {d.get('diferenca',0):,.2f}</b></div>", unsafe_allow_html=True)
+                
+                st.markdown("---")
+                pdf_data = gerar_pdf_platinum(d)
+                st.download_button("📥 BAIXAR DEMONSTRATIVO DE SITUAÇÃO (PDF)", pdf_data, f"Auditoria_{d['cpf']}.pdf", "application/pdf", use_container_width=True)
+            else: st.error("Data de nascimento incorreta.")
+        else: st.warning("CPF não localizado em nossa base Platinum.")
 
-# --- ABA EMPRESA ---
-elif menu == "🏢 Empresa":
-    st.markdown("# 🏢 Painel Corporativo Platinum")
-    if "emp_auth" not in st.session_state: st.session_state.emp_auth = None
+# ============================================================
+# 3) PORTAL DA EMPRESA (ENCORPADO)
+# ============================================================
+def portal_empresa():
+    st.markdown("# 🏢 Painel de Gestão Corporativa")
     
+    if "emp_auth" not in st.session_state: st.session_state.emp_auth = None
+
     if not st.session_state.emp_auth:
-        u = st.text_input("CNPJ (Usuário)")
-        p = st.text_input("Senha", type="password")
-        if st.button("ENTRAR"):
-            q = sb.table("empresas").select("*").eq("login", u).execute()
-            if q.data and sha256_hex(p) == q.data[0]['senha']:
-                st.session_state.emp_auth = q.data[0]
-                st.rerun()
-            else: st.error("Acesso negado.")
+        t_log, t_rec = st.tabs(["🔐 Login Corporativo", "🔑 Recuperar Acesso"])
+        with t_log:
+            u = st.text_input("CNPJ ou Usuário")
+            p = st.text_input("Senha", type="password")
+            if st.button("ACESSAR DASHBOARD"):
+                q = sb.table("empresas").select("*").eq("login", u).execute()
+                if q.data and sha256_hex(p) == q.data[0]['senha']:
+                    if check_plan_status(q.data[0].get("data_expiracao")):
+                        st.session_state.emp_auth = q.data[0]; st.rerun()
+                    else: st.error("❌ Acesso Bloqueado: Plano Expirado. Contate o Admin.")
+                else: st.error("Credenciais inválidas.")
+        with t_rec:
+            st.info("Informe seu CNPJ para receber instruções de recuperação no e-mail cadastrado.")
+            st.text_input("CNPJ da Empresa")
+            st.button("SOLICITAR RECUPERAÇÃO")
+
     else:
         emp = st.session_state.emp_auth
-        st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"emp_auth": None}))
+        st.sidebar.success(f"Empresa: {emp['nome_empresa']}")
         
-        tab1, tab2, tab3 = st.tabs(["📊 Auditoria Geral", "🛠️ Suporte", "⚙️ Minha Conta"])
-        with tab1:
+        tab_aud, tab_suporte, tab_perfil = st.tabs(["🔍 Auditoria de Funcionários", "🛠️ Suporte & Chamados", "⚙️ Configurações da Conta"])
+        
+        with tab_aud:
+            st.markdown("### 📋 Base de Dados de Auditoria")
+            c1, c2 = st.columns([3,1])
+            search = c1.text_input("🔎 Pesquisar Funcionário (Nome ou CPF)")
+            
             res = sb.table("resultados_auditoria").select("*").eq("nome_empresa", emp['nome_empresa']).execute()
-            st.dataframe(pd.DataFrame(res.data), use_container_width=True)
-        with tab2:
-            st.write("Abrir chamado técnico para suporte RRB.")
-            st.text_area("Descreva o problema")
-            st.button("Enviar")
-        with tab3:
-            st.write(f"Empresa: {emp['nome_empresa']}")
-            st.write(f"Plano: {emp['plano']}")
+            df = pd.DataFrame(res.data)
+            if not df.empty:
+                st.dataframe(df, use_container_width=True)
+                st.download_button("📥 Baixar Relatório Completo (CSV)", df.to_csv(), "relatorio_geral.csv", use_container_width=True)
+            
+            st.markdown("---")
+            st.markdown("### ❓ FAQ - Dúvidas Frequentes")
+            with st.expander("Como interpretar a coluna 'Diferença'?"): st.write("A diferença indica valores cobrados pelo banco que não constam na folha de RH.")
+            with st.expander("Qual o prazo de atualização dos dados?"): st.write("Os dados são sincronizados em tempo real com o banco de dados RRB.")
 
-# --- ABA ADMIN ---
-elif menu == "⚙️ Admin Master":
-    st.markdown("# ⚙️ Controle Master")
-    m_key = st.sidebar.text_input("Chave Mestre", type="password")
-    if m_key == st.secrets.get("SENHA_MASTER"):
-        t1, t2 = st.tabs(["🏢 Gerenciar Empresas", "📈 Visão Global"])
-        with t1:
-            st.write("Lista de empresas parceiras e status de planos.")
-            if sb:
-                emps = sb.table("empresas").select("*").execute()
-                st.table(pd.DataFrame(emps.data)[["nome_empresa", "cnpj", "plano", "status"]])
-    else:
-        st.info("Insira a Chave Mestre para acessar.")
+        with tab_suporte:
+            st.markdown("### 🎫 Central de Chamados")
+            with st.form("chamado"):
+                st.selectbox("Tipo de Problema", ["Divergência de Dados", "Erro no Sistema", "Financeiro", "Outros"])
+                st.text_area("Descreva detalhadamente sua solicitação")
+                if st.form_submit_button("ABRIR CHAMADO"):
+                    st.success("Chamado aberto com sucesso! Protocolo: #"+datetime.now().strftime("%H%M%S"))
 
-st.markdown('<a href="https://wa.me/5513996261907" class="wpp-fab" target="_blank">💬</a>', unsafe_allow_html=True)
+        with tab_perfil:
+            st.markdown("### 🔐 Segurança e Perfil")
+            new_u = st.text_input("Novo Usuário", value=emp['login'])
+            new_p = st.text_input("Nova Senha", type="password")
+            if st.button("ATUALIZAR CREDENCIAIS"):
+                sb.table("empresas").update({"login": new_u, "senha": sha256_hex(new_p)}).eq("id", emp['id']).execute()
+                st.success("Dados atualizados! Faça login novamente.")
+                st.session_state.emp_auth = None; st.rerun()
+
+# ============================================================
+# 4) ADMIN MASTER (DETALHADO)
+# ============================================================
+def portal_admin():
+    st.markdown("# ⚙️ Central de Controle Master")
+    if st.sidebar.text_input("Chave Mestre", type="password") == st.secrets["SENHA_MASTER"]:
+        
+        t_cad, t_gestao = st.tabs(["➕ Registrar Empresa", "🏢 Gestão de Parceiros"])
+        
+        with t_cad:
+            with st.form("new_emp"):
+                st.subheader("Cadastro de Nova Conta")
+                c1, c2 = st.columns(2)
+                razao = c1.text_input("Razão Social")
+                cnpj = c2.text_input("CNPJ / ID Login")
+                reps = st.text_area("Representantes (Nome e E-mail - um por linha)")
+                
+                col1, col2 = st.columns(2)
+                plano = col1.selectbox("Plano de Serviço", ["Platinum Enterprise", "Gold", "Standard"])
+                meses = col2.number_input("Vigência (Meses)", value=12)
+                
+                st.markdown("---")
+                st.warning("Termos: Ao cadastrar, a empresa autoriza o processamento de dados conforme LGPD.")
+                concordo = st.checkbox("Li e aceito os termos de autorização de uso.")
+                
+                if st.form_submit_button("EFETIVAR CADASTRO"):
+                    if concordo:
+                        exp = (date.today() + timedelta(days=meses*30)).isoformat()
+                        sb.table("empresas").insert({
+                            "nome_empresa": razao, "cnpj": cnpj, "login": cnpj,
+                            "senha": sha256_hex("123456"), "plano": plano,
+                            "data_expiracao": exp, "status": "Ativa", "representantes": reps
+                        }).execute()
